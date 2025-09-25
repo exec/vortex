@@ -97,14 +97,15 @@ jobs:
           tar -czf ../vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz *
           
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.get-release.outputs.upload_url }}
-          asset_path: ./vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
-          asset_name: vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
-          asset_content_type: application/gzip
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v0.3.0"
+          fi
+          gh release upload $TAG_NAME ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
 
   build-linux:
     needs: get-release
@@ -165,14 +166,15 @@ jobs:
           tar -czf ../vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz *
           
       - name: Upload Generic Linux Asset
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.get-release.outputs.upload_url }}
-          asset_path: ./vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
-          asset_name: vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
-          asset_content_type: application/gzip
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v0.3.0"
+          fi
+          gh release upload $TAG_NAME ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
 
   build-deb:
     needs: get-release
@@ -268,14 +270,15 @@ jobs:
           dpkg-deb --build deb-package vortex_${VERSION}_${{ matrix.arch }}.deb
           
       - name: Upload DEB Asset
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.get-release.outputs.upload_url }}
-          asset_path: ./vortex_${{ steps.get_version.outputs.version }}_${{ matrix.arch }}.deb
-          asset_name: vortex_${{ steps.get_version.outputs.version }}_${{ matrix.arch }}.deb
-          asset_content_type: application/vnd.debian.binary-package
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v0.3.0"
+          fi
+          gh release upload $TAG_NAME ./vortex_${{ steps.get_version.outputs.version }}_${{ matrix.arch }}.deb
 
   build-rpm:
     needs: get-release
@@ -375,14 +378,16 @@ jobs:
           find rpm-build/RPMS -name "*.rpm" -exec cp {} ./vortex-$VERSION-1.${{ matrix.arch }}.rpm \;
           
       - name: Upload RPM Asset
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.get-release.outputs.upload_url }}
-          asset_path: ./vortex-${{ github.ref_name }}-1.${{ matrix.arch }}.rpm
-          asset_name: vortex-${{ github.ref_name }}-1.${{ matrix.arch }}.rpm
-          asset_content_type: application/x-rpm
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v0.3.0"
+          fi
+          VERSION=${TAG_NAME#v}  # Remove 'v' prefix
+          gh release upload $TAG_NAME ./vortex-$VERSION-1.${{ matrix.arch }}.rpm
 
   create-install-script:
     needs: get-release
@@ -463,12 +468,13 @@ jobs:
           
           chmod +x install.sh
           
-      - name: Upload Install Script
-        uses: actions/upload-release-asset@v1
+      - name: Upload Install Script  
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.get-release.outputs.upload_url }}
-          asset_path: ./install.sh
-          asset_name: install.sh
-          asset_content_type: application/x-shellscript
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v0.3.0"
+          fi
+          gh release upload $TAG_NAME ./install.sh --clobber
