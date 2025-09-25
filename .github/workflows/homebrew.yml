@@ -1,0 +1,93 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create formula for'
+        required: true
+        type: string
+
+jobs:
+  update-homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release info
+        id: release_info
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+          
+          VERSION=${TAG#v}  # Remove 'v' prefix
+          
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Get checksums for macOS binaries
+          AMD64_URL="https://github.com/exec/vortex/releases/download/$TAG/vortex-$TAG-x86_64-apple-darwin.tar.gz"
+          ARM64_URL="https://github.com/exec/vortex/releases/download/$TAG/vortex-$TAG-aarch64-apple-darwin.tar.gz"
+          
+          AMD64_SHA=$(curl -sL "$AMD64_URL" | sha256sum | cut -d' ' -f1)
+          ARM64_SHA=$(curl -sL "$ARM64_URL" | sha256sum | cut -d' ' -f1)
+          
+          echo "amd64_sha=$AMD64_SHA" >> $GITHUB_OUTPUT
+          echo "arm64_sha=$ARM64_SHA" >> $GITHUB_OUTPUT
+          
+      - name: Create Homebrew Formula
+        run: |
+          cat > vortex.rb << EOF
+          class Vortex < Formula
+            desc "Lightning-fast ephemeral VM platform with hardware-level isolation"
+            homepage "https://github.com/exec/vortex"
+            version "${{ steps.release_info.outputs.version }}"
+            
+            if Hardware::CPU.arm?
+              url "https://github.com/exec/vortex/releases/download/${{ steps.release_info.outputs.tag }}/vortex-${{ steps.release_info.outputs.tag }}-aarch64-apple-darwin.tar.gz"
+              sha256 "${{ steps.release_info.outputs.arm64_sha }}"
+            else
+              url "https://github.com/exec/vortex/releases/download/${{ steps.release_info.outputs.tag }}/vortex-${{ steps.release_info.outputs.tag }}-x86_64-apple-darwin.tar.gz"
+              sha256 "${{ steps.release_info.outputs.amd64_sha }}"
+            end
+            
+            license "MIT"
+            
+            depends_on "krunvm"
+            
+            def install
+              bin.install "bin/vortex"
+            end
+            
+            test do
+              system "#{bin}/vortex", "--version"
+              system "#{bin}/vortex", "--help"
+            end
+          end
+          EOF
+          
+      - name: Submit to Homebrew
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+        run: |
+          # This would submit to homebrew-core, but for now we'll just create the formula
+          echo "Homebrew formula created:"
+          cat vortex.rb
+          
+          # To submit to homebrew-core, you would typically:
+          # 1. Fork homebrew-core
+          # 2. Create a PR with this formula
+          # 3. Get it reviewed and merged
+          
+          # For now, we'll create a gist with the formula
+          echo "Formula can be installed with:"
+          echo "brew install https://raw.githubusercontent.com/exec/vortex/main/vortex.rb"
+          
+      - name: Upload Formula as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: homebrew-formula
+          path: vortex.rb

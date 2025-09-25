@@ -2,12 +2,14 @@
 name = "vortex"
 version = "0.3.0"
 edition = "2021"
-description = "Vortex - Lightning-fast ephemeral VM platform for development and research"
-authors = ["Dylan <dylan@example.com>"]
+description = "Lightning-fast ephemeral VM platform with hardware-level isolation"
+authors = ["Vortex Contributors"]
 license = "MIT"
-repository = "https://github.com/vortex-vm/vortex"
+repository = "https://github.com/exec/vortex"
+homepage = "https://github.com/exec/vortex"
 keywords = ["vm", "virtualization", "development", "ephemeral", "microvm"]
 categories = ["development-tools", "virtualization"]
+rust-version = "1.70"
 
 [workspace]
 members = [

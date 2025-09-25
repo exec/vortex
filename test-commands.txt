@@ -1,7 +1,0 @@
-whoami
-hostname
-uname -a
-ps aux
-df -h
-echo "Hello from Vortex VM!"
-exit

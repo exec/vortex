@@ -3,8 +3,13 @@ name = "vortex-core"
 version = "0.3.0"
 edition = "2021"
 description = "Vortex Core - Foundation for ephemeral VM management"
-authors = ["Dylan <dylan@example.com>"]
+authors = ["Vortex Contributors"]
 license = "MIT"
+repository = "https://github.com/exec/vortex"
+homepage = "https://github.com/exec/vortex"
+keywords = ["vm", "virtualization", "backend", "core"]
+categories = ["development-tools", "virtualization", "api-bindings"]
+rust-version = "1.70"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

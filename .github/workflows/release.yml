@@ -1,0 +1,471 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            🔥 Vortex Release ${{ github.ref }}
+            
+            ## What's New
+            - Lightning-fast ephemeral VM management
+            - Hardware-level isolation and security
+            - Parallel multi-VM execution
+            - Real-time performance monitoring
+            - Smart dependency caching
+            - Scriptable workflows with bidirectional file sync
+            
+            ## Installation
+            Download the appropriate package for your platform below.
+            
+            ### Quick Install (macOS/Linux)
+            ```bash
+            curl -sSL https://github.com/exec/vortex/releases/latest/download/install.sh | bash
+            ```
+            
+            ## Packages Available
+            - **macOS**: Universal binary (.tar.gz) + Homebrew-ready
+            - **Ubuntu/Debian**: .deb packages for multiple architectures
+            - **RHEL/CentOS/Fedora**: .rpm packages for multiple architectures
+            - **Generic Linux**: Static binaries
+            
+            See the [README](https://github.com/exec/vortex#readme) for usage examples and documentation.
+          draft: false
+          prerelease: false
+
+  build-macos:
+    needs: create-release
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Build
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          
+      - name: Create package
+        run: |
+          mkdir -p package/bin
+          cp target/${{ matrix.target }}/release/vortex package/bin/
+          cp README.md LICENSE package/
+          
+          # Create install script
+          cat > package/install.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "Installing Vortex..."
+          
+          # Check for krunvm dependency
+          if ! command -v krunvm &> /dev/null; then
+              echo "Warning: krunvm not found. Install with: brew install krunvm"
+          fi
+          
+          # Install binary
+          sudo mkdir -p /usr/local/bin
+          sudo cp bin/vortex /usr/local/bin/
+          sudo chmod +x /usr/local/bin/vortex
+          
+          echo "Vortex installed successfully!"
+          echo "Run 'vortex --help' to get started."
+          EOF
+          chmod +x package/install.sh
+          
+      - name: Create archive
+        run: |
+          cd package
+          tar -czf ../vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz *
+          
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          asset_name: vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          asset_content_type: application/gzip
+
+  build-linux:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          fi
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Build
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
+          cargo build --release --target ${{ matrix.target }}
+          
+      - name: Create generic Linux package
+        run: |
+          mkdir -p package/bin
+          cp target/${{ matrix.target }}/release/vortex package/bin/
+          cp README.md LICENSE package/
+          
+          # Create install script
+          cat > package/install.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "Installing Vortex..."
+          
+          # Install binary
+          sudo mkdir -p /usr/local/bin
+          sudo cp bin/vortex /usr/local/bin/
+          sudo chmod +x /usr/local/bin/vortex
+          
+          echo "Vortex installed successfully!"
+          echo "Note: You'll need krunvm or Firecracker installed separately."
+          echo "Run 'vortex --help' to get started."
+          EOF
+          chmod +x package/install.sh
+          
+      - name: Create archive
+        run: |
+          cd package
+          tar -czf ../vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz *
+          
+      - name: Upload Generic Linux Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          asset_name: vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          asset_content_type: application/gzip
+
+  build-deb:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          fi
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+      
+      - name: Build
+        run: |
+          TARGET=${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
+          cargo build --release --target $TARGET
+          
+      - name: Create DEB package
+        run: |
+          TARGET=${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+          VERSION=${{ github.ref_name }}
+          VERSION=${VERSION#v}  # Remove 'v' prefix
+          
+          mkdir -p deb-package/DEBIAN
+          mkdir -p deb-package/usr/local/bin
+          mkdir -p deb-package/usr/share/doc/vortex
+          
+          # Copy binary
+          cp target/$TARGET/release/vortex deb-package/usr/local/bin/
+          chmod +x deb-package/usr/local/bin/vortex
+          
+          # Copy documentation
+          cp README.md LICENSE deb-package/usr/share/doc/vortex/
+          
+          # Create control file
+          cat > deb-package/DEBIAN/control << EOF
+          Package: vortex
+          Version: $VERSION
+          Section: utils
+          Priority: optional
+          Architecture: ${{ matrix.arch }}
+          Maintainer: Vortex Contributors <noreply@github.com>
+          Description: Lightning-fast ephemeral VM platform
+           Vortex is a powerful Rust CLI for creating and managing ephemeral
+           microVMs using krunvm on macOS and Linux. Perfect for isolated
+           development, testing, and CI/CD workflows with hardware-level security.
+           .
+           Features include parallel multi-VM execution, real-time performance
+           monitoring, smart dependency caching, and scriptable workflows with
+           bidirectional file sync.
+          Homepage: https://github.com/exec/vortex
+          EOF
+          
+          # Create postinst script
+          cat > deb-package/DEBIAN/postinst << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "Vortex installed successfully!"
+          echo "Note: You may need to install krunvm or Firecracker separately."
+          echo "Run 'vortex --help' to get started."
+          
+          exit 0
+          EOF
+          chmod +x deb-package/DEBIAN/postinst
+          
+          # Build package
+          dpkg-deb --build deb-package vortex_${VERSION}_${{ matrix.arch }}.deb
+          
+      - name: Upload DEB Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./vortex_${{ github.ref_name }}_${{ matrix.arch }}.deb
+          asset_name: vortex_${{ github.ref_name }}_${{ matrix.arch }}.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+  build-rpm:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential rpm
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          fi
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch }}-unknown-linux-gnu
+      
+      - name: Build
+        run: |
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
+          cargo build --release --target ${{ matrix.arch }}-unknown-linux-gnu
+          
+      - name: Create RPM package
+        run: |
+          VERSION=${{ github.ref_name }}
+          VERSION=${VERSION#v}  # Remove 'v' prefix
+          
+          # Create directory structure
+          mkdir -p rpm-build/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          mkdir -p rpm-build/SOURCES/vortex-$VERSION/{usr/local/bin,usr/share/doc/vortex}
+          
+          # Copy files
+          cp target/${{ matrix.arch }}-unknown-linux-gnu/release/vortex rpm-build/SOURCES/vortex-$VERSION/usr/local/bin/
+          chmod +x rpm-build/SOURCES/vortex-$VERSION/usr/local/bin/vortex
+          cp README.md LICENSE rpm-build/SOURCES/vortex-$VERSION/usr/share/doc/vortex/
+          
+          # Create tarball
+          cd rpm-build/SOURCES
+          tar -czf vortex-$VERSION.tar.gz vortex-$VERSION/
+          cd ../..
+          
+          # Create spec file
+          cat > rpm-build/SPECS/vortex.spec << EOF
+          Name:           vortex
+          Version:        $VERSION
+          Release:        1%{?dist}
+          Summary:        Lightning-fast ephemeral VM platform
+          License:        MIT
+          URL:            https://github.com/exec/vortex
+          Source0:        %{name}-%{version}.tar.gz
+          BuildArch:      ${{ matrix.arch }}
+          
+          %description
+          Vortex is a powerful Rust CLI for creating and managing ephemeral
+          microVMs using krunvm on macOS and Linux. Perfect for isolated
+          development, testing, and CI/CD workflows with hardware-level security.
+          
+          Features include parallel multi-VM execution, real-time performance
+          monitoring, smart dependency caching, and scriptable workflows with
+          bidirectional file sync.
+          
+          %prep
+          %setup -q
+          
+          %install
+          mkdir -p %{buildroot}/usr/local/bin
+          mkdir -p %{buildroot}/usr/share/doc/vortex
+          cp usr/local/bin/vortex %{buildroot}/usr/local/bin/
+          cp usr/share/doc/vortex/* %{buildroot}/usr/share/doc/vortex/
+          
+          %files
+          /usr/local/bin/vortex
+          /usr/share/doc/vortex/*
+          
+          %post
+          echo "Vortex installed successfully!"
+          echo "Note: You may need to install krunvm or Firecracker separately."
+          echo "Run 'vortex --help' to get started."
+          
+          %changelog
+          * $(date +"%%a %%b %%d %%Y") Vortex Contributors <noreply@github.com> - $VERSION-1
+          - Release $VERSION
+          EOF
+          
+          # Build RPM
+          rpmbuild --define "_topdir $(pwd)/rpm-build" -bb rpm-build/SPECS/vortex.spec
+          
+          # Find the built RPM
+          find rpm-build/RPMS -name "*.rpm" -exec cp {} ./vortex-$VERSION-1.${{ matrix.arch }}.rpm \;
+          
+      - name: Upload RPM Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./vortex-${{ github.ref_name }}-1.${{ matrix.arch }}.rpm
+          asset_name: vortex-${{ github.ref_name }}-1.${{ matrix.arch }}.rpm
+          asset_content_type: application/x-rpm
+
+  create-install-script:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create universal install script
+        run: |
+          cat > install.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          # Vortex Universal Installer
+          echo "🔥 Installing Vortex - Lightning-fast ephemeral VM platform"
+          echo
+          
+          # Detect OS and architecture
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+          
+          case $ARCH in
+              x86_64) ARCH="x86_64" ;;
+              arm64|aarch64) ARCH="aarch64" ;;
+              *) echo "Unsupported architecture: $ARCH" && exit 1 ;;
+          esac
+          
+          case $OS in
+              darwin) TARGET="${ARCH}-apple-darwin" ;;
+              linux) TARGET="${ARCH}-unknown-linux-gnu" ;;
+              *) echo "Unsupported OS: $OS" && exit 1 ;;
+          esac
+          
+          # Get latest release
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/exec/vortex/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+          if [ -z "$LATEST_RELEASE" ]; then
+              echo "Failed to get latest release information"
+              exit 1
+          fi
+          
+          echo "Installing Vortex $LATEST_RELEASE for $OS/$ARCH"
+          
+          # Download and extract
+          DOWNLOAD_URL="https://github.com/exec/vortex/releases/download/$LATEST_RELEASE/vortex-$LATEST_RELEASE-$TARGET.tar.gz"
+          TEMP_DIR=$(mktemp -d)
+          
+          echo "Downloading from $DOWNLOAD_URL..."
+          if command -v curl &> /dev/null; then
+              curl -sL "$DOWNLOAD_URL" | tar -xzf - -C "$TEMP_DIR"
+          elif command -v wget &> /dev/null; then
+              wget -qO- "$DOWNLOAD_URL" | tar -xzf - -C "$TEMP_DIR"
+          else
+              echo "Error: curl or wget is required"
+              exit 1
+          fi
+          
+          # Install
+          echo "Installing to /usr/local/bin..."
+          sudo mkdir -p /usr/local/bin
+          sudo cp "$TEMP_DIR/bin/vortex" /usr/local/bin/
+          sudo chmod +x /usr/local/bin/vortex
+          
+          # Cleanup
+          rm -rf "$TEMP_DIR"
+          
+          echo
+          echo "✅ Vortex installed successfully!"
+          echo
+          if [ "$OS" = "darwin" ]; then
+              echo "💡 Install krunvm with: brew install krunvm"
+          else
+              echo "💡 You may need to install krunvm or Firecracker separately"
+          fi
+          echo
+          echo "🚀 Run 'vortex --help' to get started"
+          echo "📖 Documentation: https://github.com/exec/vortex#readme"
+          EOF
+          
+          chmod +x install.sh
+          
+      - name: Upload Install Script
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./install.sh
+          asset_name: install.sh
+          asset_content_type: application/x-shellscript
