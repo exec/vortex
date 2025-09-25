@@ -1,0 +1,33 @@
+[package]
+name = "vortex"
+version = "0.3.0"
+edition = "2021"
+description = "Vortex - Lightning-fast ephemeral VM platform for development and research"
+authors = ["Dylan <dylan@example.com>"]
+license = "MIT"
+repository = "https://github.com/vortex-vm/vortex"
+keywords = ["vm", "virtualization", "development", "ephemeral", "microvm"]
+categories = ["development-tools", "virtualization"]
+
+[workspace]
+members = [
+    "vortex-core",
+    "vortex-dev", 
+    "vortex-research"
+]
+
+[[bin]]
+name = "vortex"
+path = "src/main.rs"
+
+[dependencies]
+vortex-core = { path = "vortex-core" }
+clap = { version = "4.0", features = ["derive"] }
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"
