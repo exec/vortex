@@ -28,15 +28,32 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           
-          # Get checksums for macOS binaries
+          # Wait for release assets to be available and get checksums
+          sleep 30  # Give release workflow time to upload assets
+          
           AMD64_URL="https://github.com/exec/vortex/releases/download/$TAG/vortex-$TAG-x86_64-apple-darwin.tar.gz"
           ARM64_URL="https://github.com/exec/vortex/releases/download/$TAG/vortex-$TAG-aarch64-apple-darwin.tar.gz"
           
-          AMD64_SHA=$(curl -sL "$AMD64_URL" | sha256sum | cut -d' ' -f1)
-          ARM64_SHA=$(curl -sL "$ARM64_URL" | sha256sum | cut -d' ' -f1)
+          # Retry logic for downloading and computing checksums
+          for i in {1..5}; do
+            AMD64_SHA=$(curl -sL "$AMD64_URL" | sha256sum | cut -d' ' -f1 2>/dev/null || echo "")
+            ARM64_SHA=$(curl -sL "$ARM64_URL" | sha256sum | cut -d' ' -f1 2>/dev/null || echo "")
+            
+            if [ -n "$AMD64_SHA" ] && [ -n "$ARM64_SHA" ] && [ ${#AMD64_SHA} -eq 64 ] && [ ${#ARM64_SHA} -eq 64 ]; then
+              echo "amd64_sha=$AMD64_SHA" >> $GITHUB_OUTPUT
+              echo "arm64_sha=$ARM64_SHA" >> $GITHUB_OUTPUT
+              break
+            fi
+            
+            echo "Attempt $i: Waiting for release assets to be available..."
+            sleep 30
+          done
           
-          echo "amd64_sha=$AMD64_SHA" >> $GITHUB_OUTPUT
-          echo "arm64_sha=$ARM64_SHA" >> $GITHUB_OUTPUT
+          if [ -z "$AMD64_SHA" ] || [ -z "$ARM64_SHA" ]; then
+            echo "Failed to get SHA256 checksums after 5 attempts"
+            echo "amd64_sha=PLACEHOLDER_AMD64_SHA256" >> $GITHUB_OUTPUT
+            echo "arm64_sha=PLACEHOLDER_ARM64_SHA256" >> $GITHUB_OUTPUT
+          fi
           
       - name: Create Homebrew Formula
         run: |

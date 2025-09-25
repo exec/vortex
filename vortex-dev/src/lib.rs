@@ -7,6 +7,6 @@ pub use vortex_core;
 pub use vortex_core::*;
 
 // Development-specific functionality will be added here
-pub mod dev_tools;
 pub mod debugging;
+pub mod dev_tools;
 pub mod testing;

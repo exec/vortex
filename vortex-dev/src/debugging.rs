@@ -8,7 +8,7 @@ impl Debugger {
     pub fn new() -> Self {
         Self
     }
-    
+
     pub async fn inspect_vm_state(&self, vm_id: &str) -> Result<()> {
         tracing::info!("Inspecting VM state: {}", vm_id);
         Ok(())

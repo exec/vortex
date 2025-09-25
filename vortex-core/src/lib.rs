@@ -1,29 +1,29 @@
 //! # Vortex Core
-//! 
+//!
 //! The foundational library for the Vortex ephemeral VM platform.
 //! Provides abstractions for VM lifecycle management, networking, storage,
 //! and extensibility for specialized use cases.
 
-pub mod vm;
+pub mod auth;
 pub mod backend;
 pub mod config;
-pub mod network;
-pub mod storage;
-pub mod metrics;
-pub mod auth;
-pub mod plugin;
 pub mod error;
+pub mod metrics;
+pub mod network;
+pub mod plugin;
+pub mod storage;
+pub mod vm;
 
 // Re-export core types
-pub use vm::{VmManager, VmInstance, VmSpec, VmState, VmEvent, ResourceLimits};
-pub use backend::{Backend, BackendProvider};
-pub use config::{VortexConfig, Template};
-pub use network::{NetworkManager, NetworkConfig};
-pub use storage::{StorageManager, Volume};
-pub use metrics::{MetricsCollector, VmMetrics, SystemMetrics};
 pub use auth::{AuthProvider, Permission};
+pub use backend::{Backend, BackendProvider};
+pub use config::{Template, VortexConfig};
+pub use error::{Result, VortexError};
+pub use metrics::{MetricsCollector, SystemMetrics, VmMetrics};
+pub use network::{NetworkConfig, NetworkManager};
 pub use plugin::{Plugin, PluginManager};
-pub use error::{VortexError, Result};
+pub use storage::{StorageManager, Volume};
+pub use vm::{ResourceLimits, VmEvent, VmInstance, VmManager, VmSpec, VmState};
 
 /// Vortex platform version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -54,15 +54,14 @@ impl VortexCore {
             plugin_manager: PluginManager::new().await?,
         })
     }
-    
+
     /// Create a new VM with full lifecycle management
     pub async fn create_vm(&self, spec: VmSpec) -> Result<VmInstance> {
         self.vm_manager.create(spec).await
     }
-    
+
     /// Attach to an interactive VM session
     pub async fn attach_vm(&self, vm_id: &str) -> Result<()> {
         self.vm_manager.attach(vm_id).await
     }
-    
 }

@@ -1,5 +1,5 @@
-use crate::error::{Result, VortexError};
 use crate::backend::{Backend, BackendProvider};
+use crate::error::{Result, VortexError};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -53,12 +53,28 @@ pub struct VmInstance {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum VmEvent {
-    Created { vm_id: String },
-    Started { vm_id: String },
-    Stopped { vm_id: String },
-    Error { vm_id: String, error: String },
-    SnapshotCreated { vm_id: String, snapshot_id: String },
-    ResourceUsage { vm_id: String, cpu: f64, memory: u64 },
+    Created {
+        vm_id: String,
+    },
+    Started {
+        vm_id: String,
+    },
+    Stopped {
+        vm_id: String,
+    },
+    Error {
+        vm_id: String,
+        error: String,
+    },
+    SnapshotCreated {
+        vm_id: String,
+        snapshot_id: String,
+    },
+    ResourceUsage {
+        vm_id: String,
+        cpu: f64,
+        memory: u64,
+    },
 }
 
 pub struct VmManager {
@@ -80,16 +96,16 @@ impl VmManager {
             event_handlers: RwLock::new(Vec::new()),
         })
     }
-    
+
     pub async fn create(&self, spec: VmSpec) -> Result<VmInstance> {
         let vm_id = generate_vm_id();
         let backend = self.backend_provider.get_backend().await?;
-        
+
         tracing::info!("Creating VM {} with spec: {:?}", vm_id, spec);
-        
+
         // Validate resource limits
         self.validate_spec(&spec).await?;
-        
+
         let vm = VmInstance {
             id: vm_id.clone(),
             spec: spec.clone(),
@@ -98,67 +114,71 @@ impl VmManager {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };
-        
+
         // Store instance
         {
             let mut instances = self.instances.write().await;
             instances.insert(vm_id.clone(), vm.clone());
         }
-        
+
         // Create VM via backend
         match vm.backend.create(&vm).await {
             Ok(_) => {
                 let mut updated_vm = vm.clone();
                 updated_vm.state = VmState::Running;
                 updated_vm.updated_at = chrono::Utc::now();
-                
+
                 {
                     let mut instances = self.instances.write().await;
                     instances.insert(vm_id.clone(), updated_vm.clone());
                 }
-                
-                self.emit_event(VmEvent::Created { vm_id: vm_id.clone() }).await?;
+
+                self.emit_event(VmEvent::Created {
+                    vm_id: vm_id.clone(),
+                })
+                .await?;
                 self.emit_event(VmEvent::Started { vm_id }).await?;
-                
+
                 Ok(updated_vm)
             }
             Err(e) => {
                 let mut failed_vm = vm;
-                failed_vm.state = VmState::Error { 
-                    message: e.to_string() 
+                failed_vm.state = VmState::Error {
+                    message: e.to_string(),
                 };
-                
+
                 {
                     let mut instances = self.instances.write().await;
                     instances.insert(vm_id.clone(), failed_vm);
                 }
-                
-                self.emit_event(VmEvent::Error { 
-                    vm_id, 
-                    error: e.to_string() 
-                }).await?;
-                
+
+                self.emit_event(VmEvent::Error {
+                    vm_id,
+                    error: e.to_string(),
+                })
+                .await?;
+
                 Err(e)
             }
         }
     }
-    
+
     pub async fn get(&self, vm_id: &str) -> Result<Option<VmInstance>> {
         let instances = self.instances.read().await;
         Ok(instances.get(vm_id).cloned())
     }
-    
+
     pub async fn list(&self) -> Result<Vec<VmInstance>> {
         // First try to get from our in-memory instances
         let instances = self.instances.read().await;
         if !instances.is_empty() {
             return Ok(instances.values().cloned().collect());
         }
-        
+
         // If no in-memory instances, query the backend directly
         let backend = self.backend_provider.get_backend().await?;
         let vm_names = backend.list_vms().await?;
-        
+
         let mut vm_instances = Vec::new();
         for vm_name in vm_names {
             // Only include VMs that match our naming pattern
@@ -186,24 +206,24 @@ impl VmManager {
                 vm_instances.push(vm);
             }
         }
-        
+
         Ok(vm_instances)
     }
-    
+
     pub async fn stop(&self, vm_id: &str) -> Result<()> {
         // First check if we have the VM in memory
         let vm_opt = {
             let instances = self.instances.read().await;
             instances.get(vm_id).cloned()
         };
-        
+
         let vm = if let Some(vm) = vm_opt {
             vm
         } else {
             // If not in memory, check if it exists in the backend
             let backend = self.backend_provider.get_backend().await?;
             let vm_names = backend.list_vms().await?;
-            
+
             if vm_names.contains(&vm_id.to_string()) {
                 // Create a minimal VM instance to use for stopping
                 VmInstance {
@@ -226,42 +246,45 @@ impl VmManager {
                     updated_at: chrono::Utc::now(),
                 }
             } else {
-                return Err(VortexError::VmError { 
-                    message: format!("VM {} not found", vm_id) 
+                return Err(VortexError::VmError {
+                    message: format!("VM {} not found", vm_id),
                 });
             }
         };
-        
+
         vm.backend.stop(&vm).await?;
-        
+
         let mut updated_vm = vm;
         updated_vm.state = VmState::Stopped;
         updated_vm.updated_at = chrono::Utc::now();
-        
+
         {
             let mut instances = self.instances.write().await;
             instances.insert(vm_id.to_string(), updated_vm);
         }
-        
-        self.emit_event(VmEvent::Stopped { vm_id: vm_id.to_string() }).await?;
-        
+
+        self.emit_event(VmEvent::Stopped {
+            vm_id: vm_id.to_string(),
+        })
+        .await?;
+
         Ok(())
     }
-    
+
     pub async fn cleanup(&self, vm_id: &str) -> Result<()> {
         // First check if we have the VM in memory
         let vm_opt = {
             let mut instances = self.instances.write().await;
             instances.remove(vm_id)
         };
-        
+
         let vm = if let Some(vm) = vm_opt {
             vm
         } else {
             // If not in memory, check if it exists in the backend
             let backend = self.backend_provider.get_backend().await?;
             let vm_names = backend.list_vms().await?;
-            
+
             if vm_names.contains(&vm_id.to_string()) {
                 // Create a minimal VM instance to use for cleanup
                 VmInstance {
@@ -284,48 +307,48 @@ impl VmManager {
                     updated_at: chrono::Utc::now(),
                 }
             } else {
-                return Err(VortexError::VmError { 
-                    message: format!("VM {} not found", vm_id) 
+                return Err(VortexError::VmError {
+                    message: format!("VM {} not found", vm_id),
                 });
             }
         };
-        
+
         vm.backend.cleanup(&vm).await?;
         Ok(())
     }
-    
+
     pub async fn attach(&self, vm_id: &str) -> Result<()> {
         let vm = {
             let instances = self.instances.read().await;
             instances.get(vm_id).cloned()
         };
-        
+
         if let Some(vm) = vm {
             vm.backend.attach(&vm).await
         } else {
-            Err(VortexError::VmError { 
-                message: format!("VM {} not found", vm_id) 
+            Err(VortexError::VmError {
+                message: format!("VM {} not found", vm_id),
             })
         }
     }
-    
+
     pub async fn add_event_handler(&self, handler: Box<dyn VmEventHandler>) {
         let mut handlers = self.event_handlers.write().await;
         handlers.push(handler);
     }
-    
+
     async fn emit_event(&self, event: VmEvent) -> Result<()> {
         let handlers = self.event_handlers.read().await;
-        
+
         for handler in handlers.iter() {
             if let Err(e) = handler.handle(event.clone()).await {
                 tracing::warn!("Event handler failed: {}", e);
             }
         }
-        
+
         Ok(())
     }
-    
+
     async fn validate_spec(&self, spec: &VmSpec) -> Result<()> {
         if spec.memory == 0 {
             return Err(VortexError::InvalidInput {
@@ -333,14 +356,14 @@ impl VmManager {
                 message: "Memory must be greater than 0".to_string(),
             });
         }
-        
+
         if spec.cpus == 0 {
             return Err(VortexError::InvalidInput {
                 field: "cpus".to_string(),
                 message: "CPUs must be greater than 0".to_string(),
             });
         }
-        
+
         // Check resource limits
         if let Some(max_memory) = spec.resource_limits.max_memory {
             if spec.memory > max_memory {
@@ -349,7 +372,7 @@ impl VmManager {
                 });
             }
         }
-        
+
         Ok(())
     }
 }

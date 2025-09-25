@@ -62,11 +62,11 @@ impl AuthProvider for NoOpAuthProvider {
             permissions: vec![Permission::AdminAll],
         })
     }
-    
+
     async fn authorize(&self, _token: &str, _permission: Permission) -> Result<bool> {
         Ok(true) // Allow all in development
     }
-    
+
     async fn get_user(&self, user_id: &str) -> Result<Option<User>> {
         Ok(Some(User {
             id: user_id.to_string(),
@@ -76,9 +76,12 @@ impl AuthProvider for NoOpAuthProvider {
             permissions: vec![Permission::AdminAll],
         }))
     }
-    
+
     async fn refresh_token(&self, _token: &str) -> Result<AuthToken> {
-        self.authenticate(&AuthCredentials::Token { token: "dev-token".to_string() }).await
+        self.authenticate(&AuthCredentials::Token {
+            token: "dev-token".to_string(),
+        })
+        .await
     }
 }
 
@@ -104,19 +107,19 @@ impl AuthProvider for JwtAuthProvider {
             message: "JWT auth provider not yet implemented".to_string(),
         })
     }
-    
+
     async fn authorize(&self, _token: &str, _permission: Permission) -> Result<bool> {
         Err(VortexError::AuthError {
             message: "JWT auth provider not yet implemented".to_string(),
         })
     }
-    
+
     async fn get_user(&self, _user_id: &str) -> Result<Option<User>> {
         Err(VortexError::AuthError {
             message: "JWT auth provider not yet implemented".to_string(),
         })
     }
-    
+
     async fn refresh_token(&self, _token: &str) -> Result<AuthToken> {
         Err(VortexError::AuthError {
             message: "JWT auth provider not yet implemented".to_string(),

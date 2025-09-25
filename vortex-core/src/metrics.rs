@@ -47,39 +47,40 @@ impl MetricsCollector {
             }),
         })
     }
-    
+
     pub async fn record_vm_metrics(&self, metrics: VmMetrics) {
         let mut vm_metrics = self.vm_metrics.write().await;
         vm_metrics.insert(metrics.vm_id.clone(), metrics);
-        
+
         // Update system metrics
         self.update_system_metrics().await;
     }
-    
+
     pub async fn get_vm_metrics(&self, vm_id: &str) -> Option<VmMetrics> {
         let vm_metrics = self.vm_metrics.read().await;
         vm_metrics.get(vm_id).cloned()
     }
-    
+
     pub async fn get_all_vm_metrics(&self) -> Vec<VmMetrics> {
         let vm_metrics = self.vm_metrics.read().await;
         vm_metrics.values().cloned().collect()
     }
-    
+
     pub async fn get_system_metrics(&self) -> SystemMetrics {
         let system_metrics = self.system_metrics.read().await;
         system_metrics.clone()
     }
-    
+
     async fn update_system_metrics(&self) {
         let vm_metrics = self.vm_metrics.read().await;
         let mut system_metrics = self.system_metrics.write().await;
-        
+
         system_metrics.total_vms = vm_metrics.len() as u32;
         system_metrics.running_vms = vm_metrics.len() as u32; // Simplified
         system_metrics.total_cpu_usage = vm_metrics.values().map(|m| m.cpu_usage_percent).sum();
         system_metrics.total_memory_usage = vm_metrics.values().map(|m| m.memory_usage_bytes).sum();
-        system_metrics.total_memory_allocated = vm_metrics.values().map(|m| m.memory_total_bytes).sum();
+        system_metrics.total_memory_allocated =
+            vm_metrics.values().map(|m| m.memory_total_bytes).sum();
         system_metrics.timestamp = chrono::Utc::now();
     }
 }
@@ -108,12 +109,12 @@ impl VmEventHandler for MetricsCollector {
                     uptime_seconds: 0,
                     timestamp: chrono::Utc::now(),
                 };
-                
+
                 self.record_vm_metrics(metrics).await;
             }
             _ => {}
         }
-        
+
         Ok(())
     }
 }

@@ -7,6 +7,6 @@ pub use vortex_core;
 pub use vortex_core::*;
 
 // Research-specific functionality will be added here
-pub mod experiments;
 pub mod analysis;
 pub mod benchmarks;
+pub mod experiments;

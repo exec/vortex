@@ -62,50 +62,77 @@ pub struct MonitoringConfig {
 impl Default for VortexConfig {
     fn default() -> Self {
         let mut image_aliases = HashMap::new();
-        image_aliases.insert("alpine".to_string(), "docker.io/library/alpine:latest".to_string());
-        image_aliases.insert("ubuntu".to_string(), "docker.io/library/ubuntu:22.04".to_string());
-        image_aliases.insert("debian".to_string(), "docker.io/library/debian:bullseye".to_string());
-        image_aliases.insert("node".to_string(), "docker.io/library/node:18-alpine".to_string());
-        image_aliases.insert("python".to_string(), "docker.io/library/python:3.11-alpine".to_string());
-        image_aliases.insert("rust".to_string(), "docker.io/library/rust:alpine".to_string());
-        
+        image_aliases.insert(
+            "alpine".to_string(),
+            "docker.io/library/alpine:latest".to_string(),
+        );
+        image_aliases.insert(
+            "ubuntu".to_string(),
+            "docker.io/library/ubuntu:22.04".to_string(),
+        );
+        image_aliases.insert(
+            "debian".to_string(),
+            "docker.io/library/debian:bullseye".to_string(),
+        );
+        image_aliases.insert(
+            "node".to_string(),
+            "docker.io/library/node:18-alpine".to_string(),
+        );
+        image_aliases.insert(
+            "python".to_string(),
+            "docker.io/library/python:3.11-alpine".to_string(),
+        );
+        image_aliases.insert(
+            "rust".to_string(),
+            "docker.io/library/rust:alpine".to_string(),
+        );
+
         let mut templates = HashMap::new();
-        templates.insert("dev".to_string(), Template {
-            image: "ubuntu:22.04".to_string(),
-            memory: 2048,
-            cpus: 2,
-            ports: vec!["8080:80".to_string(), "3000:3000".to_string()],
-            volumes: vec![],
-            environment: HashMap::new(),
-            command: Some("bash".to_string()),
-            description: "Development environment with common ports".to_string(),
-            labels: HashMap::new(),
-        });
-        
-        templates.insert("web".to_string(), Template {
-            image: "node:18-alpine".to_string(),
-            memory: 1024,
-            cpus: 1,
-            ports: vec!["3000:3000".to_string(), "8080:8080".to_string()],
-            volumes: vec![],
-            environment: HashMap::new(),
-            command: Some("sh".to_string()),
-            description: "Web development with Node.js".to_string(),
-            labels: HashMap::new(),
-        });
-        
-        templates.insert("minimal".to_string(), Template {
-            image: "alpine:latest".to_string(),
-            memory: 256,
-            cpus: 1,
-            ports: vec![],
-            volumes: vec![],
-            environment: HashMap::new(),
-            command: Some("sh".to_string()),
-            description: "Minimal Alpine Linux environment".to_string(),
-            labels: HashMap::new(),
-        });
-        
+        templates.insert(
+            "dev".to_string(),
+            Template {
+                image: "ubuntu:22.04".to_string(),
+                memory: 2048,
+                cpus: 2,
+                ports: vec!["8080:80".to_string(), "3000:3000".to_string()],
+                volumes: vec![],
+                environment: HashMap::new(),
+                command: Some("bash".to_string()),
+                description: "Development environment with common ports".to_string(),
+                labels: HashMap::new(),
+            },
+        );
+
+        templates.insert(
+            "web".to_string(),
+            Template {
+                image: "node:18-alpine".to_string(),
+                memory: 1024,
+                cpus: 1,
+                ports: vec!["3000:3000".to_string(), "8080:8080".to_string()],
+                volumes: vec![],
+                environment: HashMap::new(),
+                command: Some("sh".to_string()),
+                description: "Web development with Node.js".to_string(),
+                labels: HashMap::new(),
+            },
+        );
+
+        templates.insert(
+            "minimal".to_string(),
+            Template {
+                image: "alpine:latest".to_string(),
+                memory: 256,
+                cpus: 1,
+                ports: vec![],
+                volumes: vec![],
+                environment: HashMap::new(),
+                command: Some("sh".to_string()),
+                description: "Minimal Alpine Linux environment".to_string(),
+                labels: HashMap::new(),
+            },
+        );
+
         Self {
             default_backend: None,
             default_memory: 512,
@@ -146,7 +173,7 @@ impl Default for StorageConfig {
     fn default() -> Self {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         let base_dir = PathBuf::from(home).join(".vortex");
-        
+
         Self {
             default_volume_size: 1024 * 1024 * 1024, // 1GB
             snapshot_directory: base_dir.join("snapshots"),
@@ -168,12 +195,12 @@ impl Default for MonitoringConfig {
 impl VortexConfig {
     pub fn load() -> Result<Self> {
         let config_path = get_config_path()?;
-        
+
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
-            let config: VortexConfig = toml::from_str(&content)
-                .map_err(|e| VortexError::ConfigError { 
-                    message: format!("Failed to parse config: {}", e) 
+            let config: VortexConfig =
+                toml::from_str(&content).map_err(|e| VortexError::ConfigError {
+                    message: format!("Failed to parse config: {}", e),
                 })?;
             Ok(config)
         } else {
@@ -182,29 +209,29 @@ impl VortexConfig {
             Ok(config)
         }
     }
-    
+
     pub fn save(&self) -> Result<()> {
         let config_path = get_config_path()?;
-        
+
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| VortexError::ConfigError { 
-                message: format!("Failed to serialize config: {}", e) 
-            })?;
+
+        let content = toml::to_string_pretty(self).map_err(|e| VortexError::ConfigError {
+            message: format!("Failed to serialize config: {}", e),
+        })?;
         std::fs::write(&config_path, content)?;
-        
+
         Ok(())
     }
-    
+
     pub fn resolve_image(&self, image: &str) -> String {
-        self.image_aliases.get(image)
+        self.image_aliases
+            .get(image)
             .cloned()
             .unwrap_or_else(|| image.to_string())
     }
-    
+
     pub fn get_template(&self, name: &str) -> Option<&Template> {
         self.templates.get(name)
     }
@@ -213,9 +240,12 @@ impl VortexConfig {
 fn get_config_path() -> Result<PathBuf> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| VortexError::ConfigError { 
-            message: "Could not determine home directory".to_string() 
+        .map_err(|_| VortexError::ConfigError {
+            message: "Could not determine home directory".to_string(),
         })?;
-    
-    Ok(PathBuf::from(home).join(".config").join("vortex").join("config.toml"))
+
+    Ok(PathBuf::from(home)
+        .join(".config")
+        .join("vortex")
+        .join("config.toml"))
 }
