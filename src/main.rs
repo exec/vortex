@@ -295,6 +295,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_vm(
     vortex: &Arc<VortexCore>,
     mut spec: VmSpec,
@@ -397,10 +398,8 @@ async fn run_vm(
                 vm.id, vm.id
             );
         }
-    } else {
-        if !quiet {
-            info!("VM {} started. Command completed.", vm.id);
-        }
+    } else if !quiet {
+        info!("VM {} started. Command completed.", vm.id);
         // For non-persistent VMs, we should wait for completion and cleanup
         // This would require backend support for monitoring VM completion
     }
@@ -516,6 +515,7 @@ async fn show_templates() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_shell(
     vortex: &Arc<VortexCore>,
     image: String,
@@ -823,7 +823,7 @@ async fn run_parallel_vms(
     let mut tasks = Vec::new();
 
     for (i, image) in images.into_iter().enumerate() {
-        let vortex = vortex;
+        // vortex is available from the closure
         let command = command.clone();
         let copy_to = copy_to.clone();
         let sync_back = sync_back.clone();

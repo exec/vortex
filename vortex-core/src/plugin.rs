@@ -129,7 +129,7 @@ impl PluginManager {
     }
 
     pub async fn shutdown_all(&mut self) -> Result<()> {
-        for (name, _plugin) in &self.plugins {
+        for name in self.plugins.keys() {
             tracing::info!("Shutting down plugin: {}", name);
             // plugin.shutdown().await?; // Can't mutate due to trait object limitations
         }
@@ -183,6 +183,12 @@ impl VmEventHandler for PluginEventHandler {
 #[derive(Debug)]
 pub struct LoggingPlugin {
     metadata: PluginMetadata,
+}
+
+impl Default for LoggingPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LoggingPlugin {

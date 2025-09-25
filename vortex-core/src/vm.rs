@@ -22,7 +22,7 @@ pub struct VmSpec {
     pub resource_limits: ResourceLimits,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceLimits {
     pub max_memory: Option<u32>,
     pub max_cpus: Option<u32>,
@@ -382,13 +382,3 @@ fn generate_vm_id() -> String {
     format!("vortex-{}", &uuid_str[..8])
 }
 
-impl Default for ResourceLimits {
-    fn default() -> Self {
-        Self {
-            max_memory: None,
-            max_cpus: None,
-            max_disk: None,
-            timeout_seconds: None,
-        }
-    }
-}

@@ -119,7 +119,7 @@ impl KrunvmBackend {
         // Set library path for krunvm on macOS
         if cfg!(target_os = "macos") {
             if let Ok(brew_prefix) = std::process::Command::new("brew")
-                .args(&["--prefix"])
+                .args(["--prefix"])
                 .output()
             {
                 if brew_prefix.status.success() {
@@ -142,7 +142,7 @@ impl Backend for KrunvmBackend {
         let image_name = normalize_image_name(&vm.spec.image);
 
         let mut cmd = Self::krunvm_command();
-        cmd.args(&["create", &image_name]);
+        cmd.args(["create", &image_name]);
         cmd.arg("--name").arg(&vm.id);
         cmd.arg("--mem").arg(vm.spec.memory.to_string());
         cmd.arg("--cpus").arg(vm.spec.cpus.to_string());
@@ -171,7 +171,7 @@ impl Backend for KrunvmBackend {
 
     async fn start(&self, vm: &VmInstance) -> Result<()> {
         let mut cmd = Self::krunvm_command();
-        cmd.args(&["start", &vm.id]);
+        cmd.args(["start", &vm.id]);
 
         if let Some(command) = &vm.spec.command {
             cmd.arg("--");
@@ -180,7 +180,7 @@ impl Backend for KrunvmBackend {
                 || command.contains("|")
                 || command.contains(";")
             {
-                cmd.args(&["sh", "-c", command]);
+                cmd.args(["sh", "-c", command]);
             } else {
                 cmd.args(command.split_whitespace());
             }
@@ -205,7 +205,7 @@ impl Backend for KrunvmBackend {
 
     async fn cleanup(&self, vm: &VmInstance) -> Result<()> {
         let output = Self::krunvm_command()
-            .args(&["delete", &vm.id])
+            .args(["delete", &vm.id])
             .output()
             .await?;
 
@@ -225,7 +225,7 @@ impl Backend for KrunvmBackend {
         let shell_command = vm.spec.command.as_ref().unwrap_or(&default_shell);
 
         let mut cmd = Self::krunvm_command();
-        cmd.args(&[
+        cmd.args([
             "start",
             &vm.id,
             "--",
@@ -292,7 +292,7 @@ impl Backend for KrunvmBackend {
 
     async fn get_metrics(&self, vm: &VmInstance) -> Result<VmMetrics> {
         // Get basic VM info from krunvm
-        let output = Self::krunvm_command().args(&["list"]).output().await?;
+        let output = Self::krunvm_command().args(["list"]).output().await?;
 
         if !output.status.success() {
             return Ok(VmMetrics {
