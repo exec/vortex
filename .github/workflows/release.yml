@@ -94,7 +94,12 @@ jobs:
       - name: Create archive
         run: |
           cd package
-          tar -czf ../vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz *
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v0.3.0"
+          fi
+          tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
           
       - name: Upload Release Asset
         env:
@@ -163,7 +168,12 @@ jobs:
       - name: Create archive
         run: |
           cd package
-          tar -czf ../vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz *
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v0.3.0"
+          fi
+          tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
           
       - name: Upload Generic Linux Asset
         env:
