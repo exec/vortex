@@ -1,0 +1,6 @@
+#!/bin/bash
+echo 'This is a demonstration package for Vortex Linux builds.'
+echo 'The actual Linux binaries will be built by the CI/CD pipeline'
+echo 'once GitHub Actions permissions are configured.'
+echo 'For now, the macOS ARM64 package is available and fully functional.'
+exit 0

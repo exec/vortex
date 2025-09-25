@@ -10,7 +10,7 @@ use vortex_core::{ResourceLimits, VmSpec, VortexCore};
 #[command(
     name = "vortex",
     about = "Vortex - Lightning-fast ephemeral VM platform",
-    version = "0.3.0"
+    version = "0.3.1"
 )]
 struct Cli {
     #[command(subcommand)]

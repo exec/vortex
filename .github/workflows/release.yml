@@ -25,7 +25,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.0"
+            TAG_NAME="v0.3.1"
           fi
           
           echo "Getting release for tag: $TAG_NAME"
@@ -97,7 +97,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.0"
+            TAG_NAME="v0.3.1"
           fi
           tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
           
@@ -108,7 +108,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.0"
+            TAG_NAME="v0.3.1"
           fi
           gh release upload $TAG_NAME ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
 
@@ -171,7 +171,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.0"
+            TAG_NAME="v0.3.1"
           fi
           tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
           
@@ -182,7 +182,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.0"
+            TAG_NAME="v0.3.1"
           fi
           gh release upload $TAG_NAME ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
 
@@ -286,7 +286,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.0"
+            TAG_NAME="v0.3.1"
           fi
           gh release upload $TAG_NAME ./vortex_${{ steps.get_version.outputs.version }}_${{ matrix.arch }}.deb
 
@@ -394,7 +394,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.0"
+            TAG_NAME="v0.3.1"
           fi
           VERSION=${TAG_NAME#v}  # Remove 'v' prefix
           gh release upload $TAG_NAME ./vortex-$VERSION-1.${{ matrix.arch }}.rpm
@@ -485,6 +485,6 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.0"
+            TAG_NAME="v0.3.1"
           fi
           gh release upload $TAG_NAME ./install.sh --clobber
