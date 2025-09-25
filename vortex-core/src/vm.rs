@@ -381,4 +381,3 @@ fn generate_vm_id() -> String {
     let uuid_str = Uuid::new_v4().to_string();
     format!("vortex-{}", &uuid_str[..8])
 }
-
