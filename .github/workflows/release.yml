@@ -10,51 +10,43 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-release:
+  get-release:
     runs-on: ubuntu-latest
     outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      release_id: ${{ steps.create_release.outputs.id }}
+      upload_url: ${{ steps.get_release.outputs.upload_url }}
+      release_id: ${{ steps.get_release.outputs.id }}
     steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Get Release
+        id: get_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            🔥 Vortex Release ${{ github.ref }}
-            
-            ## What's New
-            - Lightning-fast ephemeral VM management
-            - Hardware-level isolation and security
-            - Parallel multi-VM execution
-            - Real-time performance monitoring
-            - Smart dependency caching
-            - Scriptable workflows with bidirectional file sync
-            
-            ## Installation
-            Download the appropriate package for your platform below.
-            
-            ### Quick Install (macOS/Linux)
-            ```bash
-            curl -sSL https://github.com/exec/vortex/releases/latest/download/install.sh | bash
-            ```
-            
-            ## Packages Available
-            - **macOS**: Universal binary (.tar.gz) + Homebrew-ready
-            - **Ubuntu/Debian**: .deb packages for multiple architectures
-            - **RHEL/CentOS/Fedora**: .rpm packages for multiple architectures
-            - **Generic Linux**: Static binaries
-            
-            See the [README](https://github.com/exec/vortex#readme) for usage examples and documentation.
-          draft: false
-          prerelease: false
+        run: |
+          # Get the tag name from the ref or use v0.3.0 for manual runs
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v0.3.0"
+          fi
+          
+          echo "Getting release for tag: $TAG_NAME"
+          
+          # Get existing release info
+          RELEASE_INFO=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME 2>/dev/null || echo "")
+          
+          if [ -n "$RELEASE_INFO" ]; then
+            echo "Found existing release"
+            UPLOAD_URL=$(echo "$RELEASE_INFO" | jq -r '.upload_url')
+            RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.id')
+          else
+            echo "No existing release found, this should not happen"
+            exit 1
+          fi
+          
+          echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
+          echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
 
   build-macos:
-    needs: create-release
+    needs: get-release
     runs-on: macos-latest
     strategy:
       matrix:
@@ -109,13 +101,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          upload_url: ${{ needs.get-release.outputs.upload_url }}
           asset_path: ./vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
           asset_name: vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
           asset_content_type: application/gzip
 
   build-linux:
-    needs: create-release
+    needs: get-release
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -177,19 +169,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          upload_url: ${{ needs.get-release.outputs.upload_url }}
           asset_path: ./vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
           asset_name: vortex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
           asset_content_type: application/gzip
 
   build-deb:
-    needs: create-release
+    needs: get-release
     runs-on: ubuntu-latest
     strategy:
       matrix:
         arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="v0.3.0"
+          fi
+          VERSION=${VERSION#v}  # Remove 'v' prefix
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       
       - name: Install dependencies
         run: |
@@ -269,13 +272,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./vortex_${{ github.ref_name }}_${{ matrix.arch }}.deb
-          asset_name: vortex_${{ github.ref_name }}_${{ matrix.arch }}.deb
+          upload_url: ${{ needs.get-release.outputs.upload_url }}
+          asset_path: ./vortex_${{ steps.get_version.outputs.version }}_${{ matrix.arch }}.deb
+          asset_name: vortex_${{ steps.get_version.outputs.version }}_${{ matrix.arch }}.deb
           asset_content_type: application/vnd.debian.binary-package
 
   build-rpm:
-    needs: create-release
+    needs: get-release
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -376,13 +379,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          upload_url: ${{ needs.get-release.outputs.upload_url }}
           asset_path: ./vortex-${{ github.ref_name }}-1.${{ matrix.arch }}.rpm
           asset_name: vortex-${{ github.ref_name }}-1.${{ matrix.arch }}.rpm
           asset_content_type: application/x-rpm
 
   create-install-script:
-    needs: create-release
+    needs: get-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -465,7 +468,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          upload_url: ${{ needs.get-release.outputs.upload_url }}
           asset_path: ./install.sh
           asset_name: install.sh
           asset_content_type: application/x-shellscript
