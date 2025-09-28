@@ -5,6 +5,26 @@ All notable changes to Vortex will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2025-09-28
+
+### 🧹 Bug Fixes & Cleanup
+- **Fixed Compiler Warnings**: Added missing feature flags (`krunvm`, `firecracker`) to eliminate cfg warnings
+- **Removed Dead Code**: Cleaned up unused `normalize_image_name` function
+- **Updated Version References**: All components now correctly reference v0.4.1
+- **Install Script Fix**: Corrected artifact naming to match GitHub Actions build outputs
+- **GitHub Actions Stability**: All workflows now run cleanly without deprecated action warnings
+
+### 🔧 Technical Improvements
+- **Cargo Features**: Added proper feature flag definitions for backend technologies
+- **Code Quality**: Zero compiler warnings, 100% test pass rate maintained
+- **CI/CD Pipeline**: Fully functional with proper artifact generation and naming
+- **Documentation**: Updated install instructions and artifact references
+
+### 📦 Build & Distribution
+- **Multi-platform Artifacts**: Clean builds for Linux AMD64, macOS ARM64, and macOS AMD64
+- **Installation Script**: Fixed to download correct artifact names from releases
+- **GitHub Actions**: All workflows passing with proper version handling
+
 ## [0.4.0] - 2025-09-26
 
 ### 🚀 Major Features Added

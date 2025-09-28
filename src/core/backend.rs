@@ -479,19 +479,3 @@ impl Backend for FirecrackerBackend {
         "firecracker"
     }
 }
-
-fn normalize_image_name(image: &str) -> String {
-    match image {
-        "alpine" => "docker.io/library/alpine:latest".to_string(),
-        "ubuntu" => "docker.io/library/ubuntu:latest".to_string(),
-        "debian" => "docker.io/library/debian:latest".to_string(),
-        img if img.contains(':') => {
-            if img.contains('/') {
-                img.to_string()
-            } else {
-                format!("docker.io/library/{}", img)
-            }
-        }
-        img => format!("docker.io/library/{}:latest", img),
-    }
-}

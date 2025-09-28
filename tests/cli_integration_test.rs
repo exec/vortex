@@ -65,7 +65,7 @@ fn test_template_listing() -> Result<()> {
 fn test_version_and_basic_info() -> Result<()> {
     let version_output = run_vortex_expect_success(&["--version"])?;
     assert!(version_output.contains("vortex"));
-    assert!(version_output.contains("0.4.0"));
+    assert!(version_output.contains("0.4.1"));
 
     Ok(())
 }
