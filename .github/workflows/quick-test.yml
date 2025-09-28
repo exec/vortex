@@ -1,0 +1,101 @@
+name: Quick Tests
+
+on:
+  push:
+    branches-ignore: [ main ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quick-validation:
+    name: Quick Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: quick-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          quick-${{ runner.os }}-cargo-
+    
+    - name: Check code formatting
+      run: cargo fmt --check
+    
+    - name: Run clippy
+      run: cargo clippy --release -- -D warnings
+    
+    - name: Build release binary
+      run: cargo build --release
+    
+    - name: Install cargo-audit
+      run: cargo install --force cargo-audit
+    
+    - name: Run core tests only
+      run: |
+        echo "🚀 Running core Vortex tests for quick validation..."
+        
+        # Core library tests
+        (cd vortex-core && cargo test --release)
+        
+        # CLI integration tests  
+        cargo test --test cli_integration_test --release
+        
+        # Single workspace test
+        cargo test --test workspace_integration_tests test_workspace_creation_and_listing --release
+        
+        # Quick security check
+        cargo audit
+        
+        echo "✅ Quick validation complete!"
+    
+    - name: Comment PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚀 Quick validation passed! Core tests, formatting, and security checks all look good. ✅'
+          })
+
+  build-check:
+    name: Multi-platform Build Check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Build check
+      run: |
+        echo "Building on ${{ matrix.os }}..."
+        cargo build --release
+        echo "✅ Build successful on ${{ matrix.os }}"
+    
+    - name: Binary smoke test
+      run: |
+        ./target/release/vortex --version
+        ./target/release/vortex dev --list
+        echo "✅ Binary functional on ${{ matrix.os }}"

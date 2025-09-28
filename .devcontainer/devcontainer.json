@@ -1,0 +1,67 @@
+{
+  "name": "Vortex Development Environment",
+  "image": "rust:1.75-slim",
+  
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "serayuzgur.crates",
+        "tamasfe.even-better-toml",
+        "ms-vscode.test-adapter-converter",
+        "hbenl.vscode-test-explorer",
+        "github.vscode-github-actions",
+        "ms-vscode.vscode-json"
+      ],
+      "settings": {
+        "rust-analyzer.checkOnSave.command": "clippy",
+        "rust-analyzer.cargo.features": "all",
+        "files.watcherExclude": {
+          "**/target/**": true
+        }
+      }
+    }
+  },
+
+  "containerEnv": {
+    "RUST_BACKTRACE": "1",
+    "CARGO_TARGET_DIR": "/workspace/target"
+  },
+
+  "postCreateCommand": "apt-get update && apt-get install -y git curl pkg-config libssl-dev && cargo install cargo-audit cargo-watch",
+  
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+    "source=${localWorkspaceFolder}/target,target=/workspace/target,type=bind,consistency=cached"
+  ],
+
+  "forwardPorts": [8000, 8080, 3000],
+  "portsAttributes": {
+    "8000": {
+      "label": "Vortex Development Server",
+      "onAutoForward": "notify"
+    },
+    "8080": {
+      "label": "Web Interface",
+      "onAutoForward": "openPreview"
+    },
+    "3000": {
+      "label": "Development Tools",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+
+  "onCreateCommand": "echo 'Setting up Vortex development environment...'",
+  "postStartCommand": "echo 'Vortex DevContainer ready! 🚀'",
+
+  "remoteUser": "root"
+}

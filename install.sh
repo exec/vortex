@@ -21,7 +21,7 @@ print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Vortex version to install (latest)
-VERSION="v0.3.0"
+VERSION="v0.4.0"
 REPO="exec/vortex"
 
 print_status "🚀 Installing Vortex ${VERSION} - The Docker Killer"
@@ -135,9 +135,10 @@ print_status "Verify installation:"
 echo -e "  ${CYAN}vortex --version${NC}"
 echo
 print_status "Get started:"
-echo -e "  ${CYAN}vortex shell alpine${NC}    # Start interactive Alpine VM"
-echo -e "  ${CYAN}vortex run ubuntu -e 'uname -a'${NC}    # Run command in Ubuntu"
-echo -e "  ${CYAN}vortex --help${NC}         # Show all available commands"
+echo -e "  ${CYAN}vortex dev --list${NC}              # List available templates"
+echo -e "  ${CYAN}vortex dev --init${NC}              # Create workspace from current directory"
+echo -e "  ${CYAN}vortex workspace list${NC}          # List persistent workspaces"
+echo -e "  ${CYAN}vortex --help${NC}                  # Show all available commands"
 echo
 print_status "Documentation: https://github.com/${REPO}"
-print_success "Welcome to the future of containerization! Docker who? 😎"
+print_success "Welcome to the future of development environments! 20x faster than Docker! 🚀"

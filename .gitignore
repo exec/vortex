@@ -1,7 +1,6 @@
 # Rust
-target/
-Cargo.lock
-*.pdb
+/target/
+**/*.rs.bk
 
 # IDE
 .vscode/
@@ -9,11 +8,32 @@ Cargo.lock
 *.swp
 *.swo
 
-# macOS
+# OS
 .DS_Store
+Thumbs.db
+.Trashes
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
 
 # Logs
 *.log
+test-*.log
 
-# Cache
-.vortex/
+# Test artifacts
+/test-workspaces/
+/.vortex/
+
+# Release artifacts
+/release/
+/artifacts/
+*.tar.gz
+*.zip
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Environment
+.env
+.env.local

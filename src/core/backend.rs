@@ -52,7 +52,7 @@ pub struct BackendProvider {
 
 impl BackendProvider {
     pub async fn new() -> Result<Self> {
-        let mut provider = Self {
+        let provider = Self {
             backends: HashMap::new(),
             preferred: None,
         };

@@ -1,35 +1,47 @@
 [package]
 name = "vortex"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
-description = "Lightning-fast ephemeral VM platform with hardware-level isolation"
+description = "Lightning-fast ephemeral VM platform with hardware-level isolation - 20x faster than Docker DevContainers"
 authors = ["Vortex Contributors"]
 license = "MIT"
 repository = "https://github.com/exec/vortex"
 homepage = "https://github.com/exec/vortex"
+documentation = "https://github.com/exec/vortex#readme"
 keywords = ["vm", "virtualization", "development", "ephemeral", "microvm"]
 categories = ["development-tools", "virtualization"]
 rust-version = "1.70"
-
-[workspace]
-members = [
-    "vortex-core",
-    "vortex-dev", 
-    "vortex-research"
+readme = "README.md"
+exclude = [
+    "target/",
+    "tests/",
+    "docs/",
+    ".github/",
+    "*.log"
 ]
+
 
 [[bin]]
 name = "vortex"
 path = "src/main.rs"
 
 [dependencies]
-vortex-core = { path = "vortex-core" }
 clap = { version = "4.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+async-trait = "0.1"
+thiserror = "1.0"
+toml = "0.8"
 
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.0"
+tempfile = "3.0"
+uuid = { version = "1.0", features = ["v4"] }

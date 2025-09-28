@@ -1,16 +1,18 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::info;
-use vortex_core::{ResourceLimits, VmSpec, VortexCore};
+use vortex::{
+    detect_workspace_info, init, ResourceLimits, VmSpec, VortexConfig, VortexCore, VERSION,
+};
 
 #[derive(Parser)]
 #[command(
     name = "vortex",
     about = "Vortex - Lightning-fast ephemeral VM platform",
-    version = "0.3.1"
+    version = "0.4.0"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -163,6 +165,85 @@ enum Commands {
         #[arg(long, help = "Sync results back from each VM")]
         sync_back: Vec<String>,
     },
+
+    #[command(about = "Create instant dev environments (Docker can't match this speed!)")]
+    Dev {
+        #[arg(help = "Development template (python, node, rust, go, ai)", required_unless_present_any = ["list", "init", "workspace"])]
+        template: Option<String>,
+
+        #[arg(short, long, help = "Custom working directory")]
+        workdir: Option<String>,
+
+        #[arg(short = 'v', long, help = "Volume mounts (host:guest)")]
+        volume: Vec<String>,
+
+        #[arg(short = 'p', long, help = "Port mappings (host:guest)")]
+        port: Vec<String>,
+
+        #[arg(short = 'q', long, help = "Quiet mode - no banner")]
+        quiet: bool,
+
+        #[arg(long, help = "List available development templates")]
+        list: bool,
+
+        #[arg(long, help = "Create/use persistent workspace")]
+        workspace: Option<String>,
+
+        #[arg(long, help = "Initialize workspace from current directory")]
+        init: bool,
+    },
+
+    #[command(about = "Manage persistent workspaces")]
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorkspaceCommand {
+    #[command(about = "List all workspaces")]
+    List,
+
+    #[command(about = "Create a new workspace")]
+    Create {
+        #[arg(help = "Workspace name")]
+        name: String,
+
+        #[arg(short, long, help = "Development template to use")]
+        template: String,
+
+        #[arg(long, help = "Source directory to copy (defaults to current dir)")]
+        source: Option<PathBuf>,
+    },
+
+    #[command(about = "Delete a workspace")]
+    Delete {
+        #[arg(help = "Workspace name or ID")]
+        workspace: String,
+    },
+
+    #[command(about = "Show workspace details")]
+    Info {
+        #[arg(help = "Workspace name or ID")]
+        workspace: String,
+    },
+
+    #[command(about = "Import from devcontainer.json")]
+    Import {
+        #[arg(help = "Workspace name")]
+        name: String,
+
+        #[arg(
+            long,
+            help = "Path to devcontainer.json",
+            default_value = ".devcontainer/devcontainer.json"
+        )]
+        devcontainer: PathBuf,
+
+        #[arg(long, help = "Source directory (defaults to current dir)")]
+        source: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -173,6 +254,7 @@ async fn main() -> Result<()> {
     let is_quiet = match &cli.command {
         Commands::Run { quiet, .. } => *quiet,
         Commands::Shell { quiet, .. } => *quiet,
+        Commands::Dev { quiet, .. } => *quiet,
         _ => false,
     };
 
@@ -194,15 +276,11 @@ async fn main() -> Result<()> {
     }
 
     if !is_quiet {
-        info!("Vortex v{} - Ephemeral VM Platform", vortex_core::VERSION);
+        info!("Vortex v{} - Ephemeral VM Platform", VERSION);
     }
 
     // Initialize Vortex Core
-    let vortex = Arc::new(
-        vortex_core::init()
-            .await
-            .context("Failed to initialize Vortex core")?,
-    );
+    let vortex = Arc::new(init().await.context("Failed to initialize Vortex core")?);
 
     match cli.command {
         Commands::Run {
@@ -290,6 +368,56 @@ async fn main() -> Result<()> {
         } => {
             run_parallel_vms(&vortex, images, command, quiet, copy_to, sync_back).await?;
         }
+        Commands::Dev {
+            template,
+            workdir,
+            volume,
+            port,
+            quiet,
+            list,
+            workspace,
+            init,
+        } => {
+            if list {
+                show_dev_templates(&vortex).await?;
+            } else if init {
+                init_workspace_from_current_dir(&vortex).await?;
+            } else if let Some(workspace_name) = workspace {
+                start_workspace(&vortex, &workspace_name, quiet).await?;
+            } else if let Some(template_name) = template {
+                start_dev_environment(&vortex, &template_name, workdir, volume, port, quiet)
+                    .await?;
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Template name, workspace, or --list is required"
+                ));
+            }
+        }
+        Commands::Workspace { command } => match command {
+            WorkspaceCommand::List => {
+                list_workspaces(&vortex).await?;
+            }
+            WorkspaceCommand::Create {
+                name,
+                template,
+                source,
+            } => {
+                create_workspace(&vortex, &name, &template, &source).await?;
+            }
+            WorkspaceCommand::Delete { workspace } => {
+                delete_workspace(&vortex, &workspace).await?;
+            }
+            WorkspaceCommand::Info { workspace } => {
+                show_workspace_info(&vortex, &workspace).await?;
+            }
+            WorkspaceCommand::Import {
+                name,
+                devcontainer,
+                source,
+            } => {
+                import_devcontainer_workspace(&vortex, &name, &devcontainer, &source).await?;
+            }
+        },
     }
 
     Ok(())
@@ -451,7 +579,7 @@ async fn run_template(
     template_name: &str,
     override_command: Option<String>,
 ) -> Result<()> {
-    let config = vortex_core::VortexConfig::load()?;
+    let config = VortexConfig::load()?;
     let template = config
         .get_template(template_name)
         .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", template_name))?;
@@ -490,7 +618,7 @@ async fn run_template(
 }
 
 async fn show_templates() -> Result<()> {
-    let config = vortex_core::VortexConfig::load()?;
+    let config = VortexConfig::load()?;
 
     println!("Available Templates:");
     for (name, template) in &config.templates {
@@ -528,7 +656,7 @@ async fn start_shell(
     copy_to: Vec<String>,
     workdir: Option<String>,
 ) -> Result<()> {
-    let config = vortex_core::VortexConfig::load()?;
+    let config = VortexConfig::load()?;
     let resolved_image = config.resolve_image(&image);
 
     info!("Starting interactive shell in {} VM...", resolved_image);
@@ -829,7 +957,7 @@ async fn run_parallel_vms(
         let sync_back = sync_back.clone();
 
         let task = async move {
-            let config = vortex_core::VortexConfig::load()?;
+            let config = VortexConfig::load()?;
             let resolved_image = config.resolve_image(&image);
 
             // Create unique sync paths for each VM
@@ -944,4 +1072,452 @@ async fn monitor_vm_performance(vortex: &Arc<VortexCore>, vm_id: &str) {
         "
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     );
+}
+
+async fn show_dev_templates(vortex: &Arc<VortexCore>) -> Result<()> {
+    let templates = vortex.dev_env_manager.list_templates();
+
+    println!("🔥 Available Dev Environment Templates:");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    for template in templates {
+        println!("📦 {} - {}", template.name, template.description);
+        println!("   Base: {}", template.base_image);
+        println!("   Tools: {}", template.tools.join(", "));
+        if !template.ports.is_empty() {
+            println!("   Ports: {}", template.ports.join(", "));
+        }
+        if !template.extensions.is_empty() {
+            println!("   IDE Extensions: {}", template.extensions.join(", "));
+        }
+        println!();
+    }
+
+    println!("💡 Usage: vortex dev <template> [options]");
+    println!("📖 Example: vortex dev python --workdir /workspace --volume ./src:/workspace/src");
+
+    Ok(())
+}
+
+async fn start_dev_environment(
+    vortex: &Arc<VortexCore>,
+    template_name: &str,
+    workdir: Option<String>,
+    volumes: Vec<String>,
+    ports: Vec<String>,
+    quiet: bool,
+) -> Result<()> {
+    // Parse volume and port mappings
+    let volume_mappings = parse_volume_mappings(volumes)?;
+    let _port_mappings = parse_port_mappings(ports)?;
+
+    // Create the dev environment VM
+    let vm = vortex
+        .create_dev_environment(template_name, workdir.clone(), volume_mappings)
+        .await?;
+
+    if !quiet {
+        let template = vortex
+            .dev_env_manager
+            .get_template(template_name)
+            .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", template_name))?;
+
+        println!();
+        println!("🚀 Dev Environment Ready!");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("📦 Template: {} ({})", template.name, template.description);
+        println!("🐳 Base: {}", template.base_image);
+        println!("🔧 Tools: {}", template.tools.join(", "));
+        if !template.ports.is_empty() {
+            println!("🌐 Ports: {}", template.ports.join(", "));
+        }
+        if !vm.spec.volumes.is_empty() {
+            println!("📂 Volumes: {} mount(s)", vm.spec.volumes.len());
+        }
+        println!("💾 VM ID: {}", vm.id);
+        println!();
+        println!("⚡ Lightning-fast setup complete! (Docker would still be pulling images)");
+        println!("💬 Connecting to interactive shell...");
+        println!();
+    }
+
+    // Attach to the VM for interactive development
+    vortex.attach_vm(&vm.id).await?;
+
+    // Cleanup when done
+    if !quiet {
+        println!("\n🧹 Cleaning up dev environment...");
+    }
+    vortex.vm_manager.cleanup(&vm.id).await?;
+
+    if !quiet {
+        println!("✅ Dev session complete!");
+    }
+
+    Ok(())
+}
+
+// Workspace management functions
+
+async fn init_workspace_from_current_dir(vortex: &Arc<VortexCore>) -> Result<()> {
+    let current_dir = std::env::current_dir()?;
+
+    if let Some(info) = detect_workspace_info(&current_dir) {
+        println!("🔍 Detected project in current directory:");
+        println!("   Name: {}", info.name);
+        println!("   Suggested template: {}", info.suggested_template);
+
+        if info.has_devcontainer {
+            println!("   📦 DevContainer detected!");
+            println!();
+            println!("Would you like to:");
+            println!("  1. Import from devcontainer.json (recommended)");
+            println!("  2. Create standard Vortex workspace");
+            println!();
+
+            // For now, just import the devcontainer
+            if let Some(devcontainer_path) = &info.devcontainer_path {
+                let workspace = vortex.workspace_manager.create_from_devcontainer(
+                    &info.name,
+                    devcontainer_path,
+                    &current_dir,
+                )?;
+
+                println!(
+                    "✅ Workspace '{}' created from devcontainer!",
+                    workspace.name
+                );
+                println!("🚀 Run: vortex dev --workspace {}", workspace.name);
+            }
+        } else {
+            let workspace = vortex.workspace_manager.create_workspace(
+                &info.name,
+                &info.suggested_template,
+                Some(&current_dir),
+            )?;
+
+            println!("✅ Workspace '{}' created!", workspace.name);
+            println!("🚀 Run: vortex dev --workspace {}", workspace.name);
+        }
+    } else {
+        return Err(anyhow::anyhow!(
+            "Could not detect project type in current directory"
+        ));
+    }
+
+    Ok(())
+}
+
+async fn start_workspace(
+    vortex: &Arc<VortexCore>,
+    workspace_name: &str,
+    quiet: bool,
+) -> Result<()> {
+    // Try to find workspace by name first, then by ID
+    let workspace = vortex
+        .workspace_manager
+        .find_workspace_by_name(workspace_name)?
+        .or_else(|| {
+            vortex
+                .workspace_manager
+                .get_workspace(workspace_name)
+                .unwrap_or(None)
+        })
+        .ok_or_else(|| anyhow::anyhow!("Workspace '{}' not found", workspace_name))?;
+
+    if !quiet {
+        println!();
+        println!("🔄 Launching workspace '{}'...", workspace.name);
+        println!("📁 Path: {}", workspace.path.display());
+        println!("🎯 Template: {}", workspace.config.template);
+
+        if let Some(devcontainer) = &workspace.config.devcontainer_source {
+            println!("📦 DevContainer: {}", devcontainer);
+        }
+
+        println!(
+            "⏰ Last used: {}",
+            workspace.config.last_used.format("%Y-%m-%d %H:%M")
+        );
+        println!();
+    }
+
+    // Create and start VM from workspace
+    let vm = vortex.create_workspace_vm(&workspace.id).await?;
+
+    if !quiet {
+        println!("⚡ Workspace VM ready!");
+        println!("💬 Connecting to interactive session...");
+        println!();
+    }
+
+    // Attach to the VM
+    vortex.attach_vm(&vm.id).await?;
+
+    // Cleanup when done
+    if !quiet {
+        println!("\n🧹 Cleaning up workspace VM...");
+    }
+    vortex.vm_manager.cleanup(&vm.id).await?;
+
+    if !quiet {
+        println!("✅ Workspace session complete! Your work is safely stored.");
+    }
+
+    Ok(())
+}
+
+async fn list_workspaces(vortex: &Arc<VortexCore>) -> Result<()> {
+    let workspaces = vortex.workspace_manager.list_workspaces()?;
+
+    if workspaces.is_empty() {
+        println!("No workspaces found.");
+        println!("💡 Create one with: vortex workspace create <name> --template <template>");
+        println!("💡 Or initialize from current dir: vortex dev --init");
+        return Ok(());
+    }
+
+    println!("🔥 Persistent Workspaces:");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    for workspace in workspaces {
+        println!("📁 {} ({})", workspace.name, &workspace.id[..8]);
+        println!("   Template: {}", workspace.config.template);
+        println!("   Path: {}", workspace.path.display());
+        println!(
+            "   Last used: {}",
+            workspace.config.last_used.format("%Y-%m-%d %H:%M")
+        );
+
+        if let Some(devcontainer) = &workspace.config.devcontainer_source {
+            println!("   📦 DevContainer: {}", devcontainer);
+        }
+
+        if !workspace.config.port_forwards.is_empty() {
+            println!(
+                "   🌐 Ports: {}",
+                workspace
+                    .config
+                    .port_forwards
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+
+        println!();
+    }
+
+    println!("💡 Start workspace: vortex dev --workspace <name>");
+    println!("📖 More info: vortex workspace info <name>");
+
+    Ok(())
+}
+
+async fn create_workspace(
+    vortex: &Arc<VortexCore>,
+    name: &str,
+    template: &str,
+    source: &Option<PathBuf>,
+) -> Result<()> {
+    let source_dir = source
+        .as_ref()
+        .map(|p| p.as_path())
+        .unwrap_or_else(|| std::path::Path::new("."));
+
+    // Verify template exists
+    if vortex.dev_env_manager.get_template(template).is_none() {
+        return Err(anyhow::anyhow!("Template '{}' not found", template));
+    }
+
+    let workspace = vortex
+        .workspace_manager
+        .create_workspace(name, template, Some(source_dir))?;
+
+    println!("✅ Workspace '{}' created!", workspace.name);
+    println!("📁 Path: {}", workspace.path.display());
+    println!("🎯 Template: {}", workspace.config.template);
+    println!("🚀 Start with: vortex dev --workspace {}", workspace.name);
+
+    Ok(())
+}
+
+async fn delete_workspace(vortex: &Arc<VortexCore>, workspace_name: &String) -> Result<()> {
+    // Find workspace by name or ID
+    let workspace = vortex
+        .workspace_manager
+        .find_workspace_by_name(workspace_name)?
+        .or_else(|| {
+            vortex
+                .workspace_manager
+                .get_workspace(workspace_name)
+                .unwrap_or(None)
+        })
+        .ok_or_else(|| anyhow::anyhow!("Workspace '{}' not found", workspace_name))?;
+
+    println!(
+        "⚠️  This will permanently delete workspace '{}'",
+        workspace.name
+    );
+    println!("📁 Path: {}", workspace.path.display());
+    println!();
+    println!("Are you sure? [y/N]: ");
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+
+    if input.trim().to_lowercase() == "y" {
+        vortex.workspace_manager.delete_workspace(&workspace.id)?;
+        println!("🗑️  Workspace '{}' deleted", workspace.name);
+    } else {
+        println!("❌ Cancelled");
+    }
+
+    Ok(())
+}
+
+async fn show_workspace_info(vortex: &Arc<VortexCore>, workspace_name: &String) -> Result<()> {
+    let workspace = vortex
+        .workspace_manager
+        .find_workspace_by_name(workspace_name)?
+        .or_else(|| {
+            vortex
+                .workspace_manager
+                .get_workspace(workspace_name)
+                .unwrap_or(None)
+        })
+        .ok_or_else(|| anyhow::anyhow!("Workspace '{}' not found", workspace_name))?;
+
+    println!("🔍 Workspace Details:");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("📁 Name: {}", workspace.name);
+    println!("🆔 ID: {}", workspace.id);
+    println!("🎯 Template: {}", workspace.config.template);
+    println!("📂 Path: {}", workspace.path.display());
+    println!(
+        "📅 Created: {}",
+        workspace.config.created_at.format("%Y-%m-%d %H:%M")
+    );
+    println!(
+        "⏰ Last used: {}",
+        workspace.config.last_used.format("%Y-%m-%d %H:%M")
+    );
+    println!(
+        "📁 Working directory: {}",
+        workspace.config.preferred_workdir
+    );
+
+    if let Some(devcontainer) = &workspace.config.devcontainer_source {
+        println!("📦 DevContainer source: {}", devcontainer);
+    }
+
+    if !workspace.config.port_forwards.is_empty() {
+        println!(
+            "🌐 Port forwards: {}",
+            workspace
+                .config
+                .port_forwards
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    if !workspace.config.environment_vars.is_empty() {
+        println!("🌍 Environment variables:");
+        for (key, value) in &workspace.config.environment_vars {
+            println!("   {}={}", key, value);
+        }
+    }
+
+    if !workspace.config.custom_commands.is_empty() {
+        println!("⚙️  Custom commands:");
+        for cmd in &workspace.config.custom_commands {
+            println!("   {}", cmd);
+        }
+    }
+
+    // Show directory contents
+    if workspace.path.exists() {
+        println!("\n📋 Workspace contents:");
+        match std::fs::read_dir(&workspace.path) {
+            Ok(entries) => {
+                let mut files: Vec<_> = entries.collect::<std::io::Result<Vec<_>>>()?;
+                files.sort_by_key(|e| e.file_name());
+
+                for entry in files.iter().take(10) {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if entry.file_type()?.is_dir() {
+                        println!("   📁 {}/", name);
+                    } else {
+                        println!("   📄 {}", name);
+                    }
+                }
+
+                if files.len() > 10 {
+                    println!("   ... and {} more files", files.len() - 10);
+                }
+            }
+            Err(e) => println!("   Error reading directory: {}", e),
+        }
+    }
+
+    println!();
+    println!(
+        "🚀 Start workspace: vortex dev --workspace {}",
+        workspace.name
+    );
+
+    Ok(())
+}
+
+async fn import_devcontainer_workspace(
+    vortex: &Arc<VortexCore>,
+    name: &str,
+    devcontainer_path: &Path,
+    source: &Option<PathBuf>,
+) -> Result<()> {
+    let source_dir = source
+        .as_ref()
+        .map(|p| p.as_path())
+        .unwrap_or_else(|| std::path::Path::new("."));
+
+    if !devcontainer_path.exists() {
+        return Err(anyhow::anyhow!(
+            "DevContainer file not found: {}",
+            devcontainer_path.display()
+        ));
+    }
+
+    let workspace =
+        vortex
+            .workspace_manager
+            .create_from_devcontainer(name, devcontainer_path, source_dir)?;
+
+    println!(
+        "✅ Workspace '{}' imported from devcontainer!",
+        workspace.name
+    );
+    println!("📦 DevContainer: {}", devcontainer_path.display());
+    println!("📁 Path: {}", workspace.path.display());
+    println!("🎯 Detected template: {}", workspace.config.template);
+
+    if !workspace.config.port_forwards.is_empty() {
+        println!(
+            "🌐 Port forwards: {}",
+            workspace
+                .config
+                .port_forwards
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    println!("🚀 Start with: vortex dev --workspace {}", workspace.name);
+
+    Ok(())
 }

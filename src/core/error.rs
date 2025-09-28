@@ -40,6 +40,12 @@ pub enum VortexError {
     #[error("Serialization error: {0}")]
     Serde(#[from] serde_json::Error),
 
+    #[error("Template not found: {name}")]
+    TemplateNotFound { name: String },
+
+    #[error("Template already exists: {name}")]
+    TemplateExists { name: String },
+
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
 }

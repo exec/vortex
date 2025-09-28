@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  vortex-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../..:/workspaces:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/workspaces/firecracker-wrapper/target
+    environment:
+      - RUST_BACKTRACE=1
+      - CARGO_TARGET_DIR=/workspaces/firecracker-wrapper/target
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+      - "3000:3000"
+    working_dir: /workspaces/firecracker-wrapper
+    command: sleep infinity
+
+volumes:
+  cargo-cache:
+  target-cache:
