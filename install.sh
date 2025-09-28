@@ -40,31 +40,27 @@ esac
 
 case $OS in
     linux)
-        # Check for package manager and install accordingly
-        if command -v apt-get &> /dev/null; then
-            print_status "Detected Ubuntu/Debian system"
-            PACKAGE="vortex_${VERSION#v}_${ARCH}.deb"
-            INSTALL_CMD="sudo dpkg -i"
-        elif command -v yum &> /dev/null || command -v dnf &> /dev/null; then
-            print_status "Detected RHEL/CentOS/Fedora system"  
-            PACKAGE="vortex-${VERSION#v}-1.${ARCH}.rpm"
-            if command -v dnf &> /dev/null; then
-                INSTALL_CMD="sudo dnf install -y"
-            else
-                INSTALL_CMD="sudo yum install -y"
-            fi
+        print_status "Detected Linux system"
+        # Use simplified naming from GitHub Actions artifacts
+        if [[ $ARCH == "x86_64" ]]; then
+            PACKAGE="vortex-linux-amd64.tar.gz"
         else
-            print_status "Generic Linux system - using binary install"
-            PACKAGE="vortex-${VERSION}-${ARCH}-unknown-linux-gnu.tar.gz"
-            INSTALL_CMD="tar -xzf"
+            print_error "Unsupported Linux architecture: $ARCH (only x86_64/amd64 supported)"
+            exit 1
         fi
+        INSTALL_CMD="tar -xzf"
         ;;
     darwin)
         print_status "Detected macOS system"
+        # Use simplified naming from GitHub Actions artifacts
         if [[ $ARCH == "aarch64" ]]; then
-            ARCH="arm64"
+            PACKAGE="vortex-macos-arm64.tar.gz"
+        elif [[ $ARCH == "x86_64" ]]; then
+            PACKAGE="vortex-macos-amd64.tar.gz"
+        else
+            print_error "Unsupported macOS architecture: $ARCH"
+            exit 1
         fi
-        PACKAGE="vortex-${VERSION}-${ARCH}-apple-darwin.tar.gz"
         INSTALL_CMD="tar -xzf"
         ;;
     *)
