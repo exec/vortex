@@ -318,18 +318,48 @@ impl VmManager {
     }
 
     pub async fn attach(&self, vm_id: &str) -> Result<()> {
-        let vm = {
+        // First check if we have the VM in memory
+        let vm_opt = {
             let instances = self.instances.read().await;
             instances.get(vm_id).cloned()
         };
 
-        if let Some(vm) = vm {
-            vm.backend.attach(&vm).await
+        let vm = if let Some(vm) = vm_opt {
+            vm
         } else {
-            Err(VortexError::VmError {
-                message: format!("VM {} not found", vm_id),
-            })
-        }
+            // If not in memory, check if it exists in the backend
+            let backend = self.backend_provider.get_backend().await?;
+            let vm_names = backend.list_vms().await?;
+
+            if vm_names.contains(&vm_id.to_string()) {
+                // Create a minimal VM instance to use for attaching
+                VmInstance {
+                    id: vm_id.to_string(),
+                    spec: VmSpec {
+                        image: "unknown".to_string(),
+                        memory: 512,
+                        cpus: 1,
+                        ports: HashMap::new(),
+                        volumes: HashMap::new(),
+                        environment: HashMap::new(),
+                        command: None,
+                        labels: HashMap::new(),
+                        network_config: None,
+                        resource_limits: ResourceLimits::default(),
+                    },
+                    state: VmState::Running,
+                    backend: Arc::clone(&backend),
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }
+            } else {
+                return Err(VortexError::VmError {
+                    message: format!("VM {} not found", vm_id),
+                });
+            }
+        };
+
+        vm.backend.attach(&vm).await
     }
 
     pub async fn add_event_handler(&self, handler: Box<dyn VmEventHandler>) {

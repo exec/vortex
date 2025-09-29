@@ -1,0 +1,12 @@
+[package]
+name = "vortex-rust-example"
+version = "0.1.0"
+edition = "2021"
+description = "Rust CLI example demonstrating Vortex's instant Rust development environments"
+authors = ["Vortex Team"]
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }

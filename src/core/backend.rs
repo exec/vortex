@@ -52,7 +52,7 @@ pub struct BackendProvider {
 
 impl BackendProvider {
     pub async fn new() -> Result<Self> {
-        let provider = Self {
+        let mut provider = Self {
             backends: HashMap::new(),
             preferred: None,
         };
@@ -116,19 +116,9 @@ impl KrunvmBackend {
     fn krunvm_command() -> tokio::process::Command {
         let mut cmd = tokio::process::Command::new("krunvm");
 
-        // Set library path for krunvm on macOS
+        // Set library path for krunvm on macOS using known homebrew path
         if cfg!(target_os = "macos") {
-            if let Ok(brew_prefix) = std::process::Command::new("brew")
-                .args(["--prefix"])
-                .output()
-            {
-                if brew_prefix.status.success() {
-                    let prefix_str = String::from_utf8_lossy(&brew_prefix.stdout);
-                    let prefix = prefix_str.trim();
-                    let lib_path = format!("{}/lib", prefix);
-                    cmd.env("DYLD_LIBRARY_PATH", lib_path);
-                }
-            }
+            cmd.env("DYLD_LIBRARY_PATH", "/opt/homebrew/lib");
         }
 
         cmd
@@ -139,7 +129,7 @@ impl KrunvmBackend {
 #[async_trait]
 impl Backend for KrunvmBackend {
     async fn create(&self, vm: &VmInstance) -> Result<()> {
-        let image_name = normalize_image_name(&vm.spec.image);
+        let image_name = &vm.spec.image;
 
         let mut cmd = Self::krunvm_command();
         cmd.args(["create", &image_name]);
@@ -369,7 +359,17 @@ impl Backend for KrunvmBackend {
     }
 
     async fn list_vms(&self) -> Result<Vec<String>> {
-        let output = Self::krunvm_command().arg("list").output().await?;
+        // Use blocking task to avoid async hang with krunvm
+        let output = tokio::task::spawn_blocking(|| {
+            std::process::Command::new("krunvm")
+                .env("DYLD_LIBRARY_PATH", "/opt/homebrew/lib")
+                .arg("list")
+                .output()
+        }).await.map_err(|e| VortexError::VmError {
+            message: format!("Task join error: {}", e),
+        })?.map_err(|e| VortexError::VmError {
+            message: format!("Failed to execute krunvm: {}", e),
+        })?;
 
         if !output.status.success() {
             return Ok(vec![]);
@@ -381,6 +381,7 @@ impl Backend for KrunvmBackend {
             .filter_map(|line| {
                 let line = line.trim();
                 if !line.is_empty()
+                    && !line.starts_with(" ") // Not indented details
                     && !line.contains("CPUs:")
                     && !line.contains("RAM")
                     && !line.contains("DNS")
@@ -399,10 +400,19 @@ impl Backend for KrunvmBackend {
     }
 
     async fn is_available(&self) -> Result<bool> {
-        // Try to run krunvm --help to check if it's available and working
-        let output = Self::krunvm_command().arg("--help").output().await?;
+        // Use blocking task for availability check too
+        let result = tokio::task::spawn_blocking(|| {
+            std::process::Command::new("krunvm")
+                .env("DYLD_LIBRARY_PATH", "/opt/homebrew/lib")
+                .arg("--help")
+                .output()
+        }).await.map_err(|e| VortexError::VmError {
+            message: format!("Task join error: {}", e),
+        })?.map_err(|e| VortexError::VmError {
+            message: format!("Failed to check krunvm availability: {}", e),
+        })?;
 
-        Ok(output.status.success())
+        Ok(result.status.success())
     }
 
     fn name(&self) -> &'static str {

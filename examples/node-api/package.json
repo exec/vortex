@@ -1,0 +1,18 @@
+{
+  "name": "vortex-node-api-example",
+  "version": "1.0.0",
+  "description": "Node.js API example demonstrating Vortex's instant development environments",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "npm start",
+    "test": "node test.js"
+  },
+  "keywords": ["vortex", "nodejs", "api", "development", "environment"],
+  "author": "Vortex Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}

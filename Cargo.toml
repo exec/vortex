@@ -21,7 +21,7 @@ exclude = [
 ]
 
 [features]
-default = []
+default = ["krunvm"]
 # Backend features for different VM technologies
 krunvm = []
 firecracker = []

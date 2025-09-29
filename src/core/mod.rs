@@ -7,10 +7,12 @@
 pub mod auth;
 pub mod backend;
 pub mod config;
+pub mod daemon;
 pub mod error;
 pub mod metrics;
 pub mod network;
 pub mod plugin;
+pub mod session;
 pub mod storage;
 pub mod templates;
 pub mod vm;
@@ -20,10 +22,12 @@ pub mod workspace;
 pub use auth::{AuthProvider, Permission};
 pub use backend::{Backend, BackendProvider};
 pub use config::{Template, VortexConfig};
+pub use daemon::{DaemonClient, VortexDaemon};
 pub use error::{Result, VortexError};
 pub use metrics::{MetricsCollector, SystemMetrics, VmMetrics};
 pub use network::{NetworkConfig, NetworkManager};
 pub use plugin::{Plugin, PluginManager};
+pub use session::{SessionCommand, SessionManager, SessionResponse, SessionState, VmSession};
 pub use storage::{StorageManager, Volume};
 pub use templates::{DevEnvironmentManager, DevTemplate};
 pub use vm::{ResourceLimits, VmEvent, VmInstance, VmManager, VmSpec, VmState};
@@ -39,7 +43,8 @@ pub async fn init() -> Result<VortexCore> {
 
 /// Main Vortex core orchestrator
 pub struct VortexCore {
-    pub vm_manager: VmManager,
+    pub vm_manager: std::sync::Arc<VmManager>,
+    pub session_manager: SessionManager,
     pub network_manager: NetworkManager,
     pub storage_manager: StorageManager,
     pub metrics_collector: MetricsCollector,
@@ -51,8 +56,12 @@ pub struct VortexCore {
 
 impl VortexCore {
     pub async fn new() -> Result<Self> {
+        let vm_manager = std::sync::Arc::new(VmManager::new().await?);
+        let session_manager = SessionManager::new(vm_manager.clone()).await?;
+        
         Ok(Self {
-            vm_manager: VmManager::new().await?,
+            vm_manager,
+            session_manager,
             network_manager: NetworkManager::new().await?,
             storage_manager: StorageManager::new().await?,
             metrics_collector: MetricsCollector::new().await?,
@@ -71,6 +80,32 @@ impl VortexCore {
     /// Attach to an interactive VM session
     pub async fn attach_vm(&self, vm_id: &str) -> Result<()> {
         self.vm_manager.attach(vm_id).await
+    }
+
+    /// Create a new session with optional persistence
+    pub async fn create_session(&self, spec: VmSpec, name: Option<String>, persistent: bool) -> Result<VmSession> {
+        self.session_manager.create_session(spec, name, persistent).await
+    }
+
+    /// List all sessions
+    pub async fn list_sessions(&self) -> Result<Vec<VmSession>> {
+        self.session_manager.list_sessions().await
+    }
+
+    /// Attach to a session by ID
+    pub async fn attach_session(&self, session_id: &str) -> Result<()> {
+        let client_pid = std::process::id();
+        self.session_manager.attach_session(session_id, client_pid).await
+    }
+
+    /// Stop a session
+    pub async fn stop_session(&self, session_id: &str) -> Result<()> {
+        self.session_manager.stop_session(session_id).await
+    }
+
+    /// Delete a session
+    pub async fn delete_session(&self, session_id: &str) -> Result<()> {
+        self.session_manager.delete_session(session_id).await
     }
 
     /// Create a development environment VM from a template
