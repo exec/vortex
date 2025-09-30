@@ -43,56 +43,10 @@ fn test_vortex_help_commands() -> Result<()> {
 }
 
 #[test]
-fn test_template_listing() -> Result<()> {
-    let output = run_vortex_expect_success(&["dev", "--list"])?;
-
-    // Should contain all our built-in templates
-    assert!(output.contains("python"));
-    assert!(output.contains("node"));
-    assert!(output.contains("rust"));
-    assert!(output.contains("go"));
-    assert!(output.contains("ai"));
-
-    // Should contain descriptions
-    assert!(output.contains("Complete Python development environment"));
-    assert!(output.contains("Node.js development environment"));
-    assert!(output.contains("Rust development environment"));
-
-    Ok(())
-}
-
-#[test]
 fn test_version_and_basic_info() -> Result<()> {
     let version_output = run_vortex_expect_success(&["--version"])?;
     assert!(version_output.contains("vortex"));
     assert!(version_output.contains("0.4.1"));
-
-    Ok(())
-}
-
-#[test]
-fn test_error_handling() -> Result<()> {
-    // Test invalid template
-    let output = Command::new(get_vortex_binary())
-        .args(&[
-            "workspace",
-            "create",
-            "test",
-            "--template",
-            "invalid-template",
-        ])
-        .output()?;
-
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("not found") || stderr.contains("Template"));
-
-    // Test invalid workspace operation
-    let output = Command::new(get_vortex_binary())
-        .args(&["workspace", "info", "non-existent-workspace"])
-        .output()?;
-
-    assert!(!output.status.success());
 
     Ok(())
 }

@@ -365,9 +365,12 @@ impl Backend for KrunvmBackend {
                 .env("DYLD_LIBRARY_PATH", "/opt/homebrew/lib")
                 .arg("list")
                 .output()
-        }).await.map_err(|e| VortexError::VmError {
+        })
+        .await
+        .map_err(|e| VortexError::VmError {
             message: format!("Task join error: {}", e),
-        })?.map_err(|e| VortexError::VmError {
+        })?
+        .map_err(|e| VortexError::VmError {
             message: format!("Failed to execute krunvm: {}", e),
         })?;
 
@@ -406,9 +409,12 @@ impl Backend for KrunvmBackend {
                 .env("DYLD_LIBRARY_PATH", "/opt/homebrew/lib")
                 .arg("--help")
                 .output()
-        }).await.map_err(|e| VortexError::VmError {
+        })
+        .await
+        .map_err(|e| VortexError::VmError {
             message: format!("Task join error: {}", e),
-        })?.map_err(|e| VortexError::VmError {
+        })?
+        .map_err(|e| VortexError::VmError {
             message: format!("Failed to check krunvm availability: {}", e),
         })?;
 

@@ -1,69 +1,239 @@
-# 🔥 Vortex - Lightning-fast Ephemeral VM Platform
+# 🚀 Vortex
+
+A next-generation distributed development platform that automatically maps project directories to optimized VMs with intelligent orchestration.
 
 [![Tests](https://github.com/exec/vortex/actions/workflows/test.yml/badge.svg)](https://github.com/exec/vortex/actions/workflows/test.yml)
 [![Quick Tests](https://github.com/exec/vortex/actions/workflows/quick-test.yml/badge.svg)](https://github.com/exec/vortex/actions/workflows/quick-test.yml)
 [![Deploy](https://github.com/exec/vortex/actions/workflows/deploy.yml/badge.svg)](https://github.com/exec/vortex/actions/workflows/deploy.yml)
 [![Security Audit](https://img.shields.io/badge/security-audited-green.svg)](https://github.com/exec/vortex/actions/workflows/test.yml)
 
-A powerful Rust CLI for creating and managing ephemeral microVMs using krunvm on macOS. Perfect for isolated development, testing, and CI/CD workflows.
+## 🎯 What Makes Vortex Revolutionary
 
-## ✨ Key Features
+- 🔍 **Auto-Discovery** - Scans your project and automatically detects services (frontend, backend, database, workers)
+- 🎪 **Directory-to-VM Mapping** - Each service runs in its own optimized microVM with perfect isolation
+- ⚡ **Lightning-Fast Setup** - From `git clone` to running distributed environment in under 5 minutes
+- 🎨 **Beautiful CLI** - Rich colors, emojis, and intuitive commands that make development fun
+- 🔧 **Multi-Service Orchestration** - Manage complex workspaces with multiple interconnected services
+- 📊 **Real-time Monitoring** - Live dashboards showing service health, metrics, and logs
 
-### ⚡ **Ultra-Fast Performance**
-- **Sub-second boot**: VM startup in ~0.8 seconds
-- **Dedicated resources**: Each VM gets guaranteed CPU and memory allocation
-- **Zero daemon overhead**: Lightweight architecture with no background processes
-- **Native performance**: Direct hardware access without virtualization penalties
+## 🚀 Quick Start
 
-### 🛡️ **Hardware-Level Security**
-- **True isolation**: Hardware hypervisor boundaries provide fortress-level security
-- **Escape-proof**: Impossible VM breakouts protect your host system
-- **Multi-tenancy ready**: Safely run untrusted code without fear
-- **Kernel protection**: Host kernel completely isolated from VM workloads
-- **Supply chain safety**: Malicious images are trapped within VM boundaries
-
-### 🚀 **Developer Experience**
-- **Truly ephemeral**: VMs completely disappear after use - no cleanup needed
-- **Bidirectional file sync**: Seamless data flow between host and VMs
-- **Native integration**: Works naturally with your existing workflow
-- **Clean slate guarantee**: Fresh kernel and userspace every time
-- **Simple networking**: Intuitive port forwarding without complexity
-
-### 💎 **Advanced Capabilities**
-- **Full OS testing**: Run different kernels and test system-level components
-- **Parallel execution**: Run workloads across multiple VMs simultaneously
-- **Real-time monitoring**: Hardware-level performance metrics during execution
-- **Smart caching**: Persistent dependency caching for faster subsequent runs
-- **Malware analysis**: Safely execute and analyze suspicious code
-- **Compliance ready**: Auditable boundaries for enterprise requirements
-
-### 🎯 **Enterprise Reliability**
-- **Predictable performance**: Resource guarantees without interference
-- **Failure isolation**: VM crashes don't affect other workloads
-- **Forensic capabilities**: Complete VM state capture and analysis
-- **Regulatory compliance**: Hardware-enforced boundaries for strict requirements
-
-## 🆚 Container Platform Comparison
-
-Unlike container platforms that share the host kernel and rely on namespace isolation, Vortex provides true hardware-level virtualization. This fundamental difference enables capabilities impossible with containers: different kernel versions, system-level testing, guaranteed resource isolation, and security boundaries that can't be bypassed through kernel exploits.
-
-## 🚀 Quick Install
-
+### Auto-Discovery Workflow (Phase 5 - Current)
 ```bash
-git clone <repo-url>
-cd firecracker-wrapper
-cargo build --release
-sudo cp target/release/vortex /usr/local/bin/
+# Scan any project directory and auto-detect services
+./vortex_orchestrator workspace init ./my-complex-project
+
+# Creates vortex.yaml with detected services:
+# frontend/ → Node.js VM
+# backend/  → Python VM  
+# worker/   → Go VM
+# database/ → PostgreSQL VM
+
+# Deploy the entire distributed workspace
+./vortex_orchestrator workspace create --config vortex.yaml
+
+# Monitor everything in real-time
+./vortex_orchestrator monitor
 ```
 
-## 📖 Usage
+### Manual Template Workflow  
+```bash
+# Create pre-built workspace templates
+./vortex_orchestrator workspace create fullstack-webapp myapp
+./vortex_orchestrator workspace create microservices-api enterprise  
+./vortex_orchestrator workspace create ai-ml-pipeline research
 
-### 🎯 Scriptable Execution (One-liner Workflows)
+# Session management (like tmux for VMs)
+./vortex_quick sessions                    # List background VMs
+./vortex_quick attach my-session          # Connect to running VM
+./vortex_quick create python test         # Create new session
+```
 
-The most powerful feature - run isolated workloads with bidirectional file sync:
+## 🔍 Project Auto-Discovery
+
+Vortex automatically detects project structure and suggests optimal VM configurations:
+
+| File Found | Language | Suggested Image | Default Ports |
+|------------|----------|----------------|---------------|
+| `package.json` | Node.js | `node:18-alpine` | 3000, 3001 |
+| `requirements.txt` | Python | `python:3.11-slim` | 8000, 8001 |
+| `go.mod` | Go | `golang:1.21-alpine` | 8080, 8081 |
+| `Cargo.toml` | Rust | `rust:1.70` | 8080 |
+| `composer.json` | PHP | `php:8.2-fpm-alpine` | 9000 |
+| `Gemfile` | Ruby | `ruby:3.2-alpine` | 3000 |
+
+**Service Type Detection:**
+- `frontend/`, `ui/`, `web/` → Frontend service with hot reload
+- `backend/`, `api/`, `server/` → Backend API service
+- `worker/`, `jobs/`, `tasks/` → Background worker service
+- `database/`, `migrations/` → Database service
+
+## 🎪 Workspace Templates
+
+### 🌐 Full-Stack Web App
+- ⚛️ **Frontend**: React with hot reload (3000:3000)
+- 🐍 **Backend**: FastAPI with auto-reload (8000:8000)
+- 🐘 **Database**: PostgreSQL with persistence (5432:5432)
+- 🔴 **Cache**: Redis for sessions (6379:6379)
+
+### 🔬 Microservices Platform
+- 🚪 **API Gateway**: Load balancing and routing (8080:8080)
+- 👤 **User Service**: Go microservice (8001:8000)
+- 📦 **Order Service**: Go microservice (8002:8000)
+- 📡 **Message Queue**: NATS for service communication (4222:4222)
+- 🍃 **Database**: MongoDB for microservices (27017:27017)
+
+### 🤖 AI/ML Pipeline
+- 📓 **Jupyter Lab**: TensorFlow with GPU support (8888:8888)
+- 🧠 **ML API**: FastAPI model serving (8000:8000)
+- ⚙️ **Data Processor**: ETL pipeline
+- 🐘 **Database**: PostgreSQL for ML data (5432:5432)
+- 🔴 **Cache**: Redis for job queues (6379:6379)
+
+## 🛠 Installation
+
+### Prerequisites
+- macOS or Linux
+- [krunvm](https://github.com/containers/krunvm) installed
+- Docker/Podman for container images
+
+### Install Vortex
+```bash
+git clone https://github.com/exec/vortex.git
+cd vortex
+cargo build --release
+
+# Use the session manager directly
+./vortex_quick sessions
+./vortex_quick create python myproject
+
+# Use the orchestrator for complex workspaces  
+./vortex_orchestrator workspace init ./my-project
+./vortex_orchestrator monitor
+```
+
+## 🔄 File Synchronization
+
+Vortex provides real-time bidirectional file sync between your host and VMs:
 
 ```bash
-# Simple command execution (quiet mode shows only command output)
+# Enable live file sync
+./vortex_orchestrator sync enable ./my-project
+
+# Watch file changes in real-time
+./vortex_orchestrator sync watch
+
+# Check sync status
+./vortex_orchestrator sync status
+```
+
+## 📊 Monitoring & Logs
+
+```bash
+# Real-time dashboard with service health
+./vortex_orchestrator monitor
+
+# Aggregated logs from all services
+./vortex_orchestrator logs
+
+# Service-specific logs
+./vortex_orchestrator logs frontend
+
+# Cluster resource utilization
+./vortex_orchestrator cluster status
+./vortex_orchestrator cluster scale up
+```
+
+## 🎯 Architecture
+
+### Phase 5 (Current): Directory-to-VM Mapping
+- ✅ **Auto-discovery** of project structure
+- ✅ **Language detection** and optimal image selection
+- ✅ **Service type inference** from directory patterns
+- ✅ **YAML configuration** generation
+- ✅ **Integrated orchestration** with existing templates
+
+### Upcoming Phases
+- **Phase 6**: Context-aware environments (dev/staging/prod)
+- **Phase 7**: Real file synchronization engine
+- **Phase 8**: Editor integration (VS Code, Neovim, etc.)
+- **Phase 9**: Advanced orchestration (dependencies, scaling)
+- **Phase 10**: Cloud deployment and team collaboration
+
+See [ROADMAP.md](ROADMAP.md) for detailed development plans.
+
+## 🌟 Examples
+
+### Auto-Discovering a Complex Project
+```bash
+cd ~/my-ecommerce-platform
+./vortex_orchestrator workspace init .
+
+# Output:
+# 🔍 Discovered project structure:
+#   frontend/     → Node.js (package.json detected)
+#   api/          → Python (requirements.txt detected)  
+#   worker/       → Go (go.mod detected)
+#   database/     → PostgreSQL (migrations/ detected)
+#
+# ✅ Configuration saved to: vortex.yaml
+# 💡 Run: vortex workspace create --config vortex.yaml
+```
+
+### Managing Distributed Workspaces
+```bash
+# Show all active workspaces
+./vortex_orchestrator workspace status
+
+# Output:
+# 🔥 Found 3 active workspaces:
+# 1. 🔥 crazy-ecommerce (3 services)
+# 2. 🔥 enterprise-platform (5 services)  
+# 3. 🔥 my-project (4 services)
+
+# Stop entire workspace
+./vortex_orchestrator workspace stop my-project
+```
+
+### Individual Session Management
+```bash
+# List all background sessions
+./vortex_quick sessions
+
+# Create new development session
+./vortex_quick create python myproject
+
+# Attach to running session
+./vortex_quick attach myproject
+
+# Stop individual session
+./vortex_quick stop myproject
+```
+
+## 🎯 Use Cases
+
+### **Distributed Development**
+- **Multi-service applications**: Each service in its own VM with perfect isolation
+- **Language polyglot projects**: Different runtime environments for each component
+- **Microservice development**: True service boundaries with networking
+
+### **Team Collaboration**
+- **Shared development environments**: Consistent setup across team members
+- **Environment parity**: Dev environments match staging and production
+- **Onboarding**: New developers productive in minutes, not hours
+
+### **Enterprise Development**
+- **Compliance requirements**: Hardware-level isolation for sensitive projects
+- **Resource allocation**: Dedicated CPU/memory per service
+- **Security boundaries**: True isolation between components
+
+## 🔧 Legacy Features (v0.3.0)
+
+Vortex retains its powerful single-VM capabilities:
+
+### **Scriptable Execution**
+```bash
+# One-liner workflows with file sync
 vortex run alpine -e "echo 'Hello World'" -q
 
 # Copy project in, build it, sync results back
@@ -72,328 +242,63 @@ vortex run node:18 -q \
   --workdir /workspace \
   --sync-back /workspace/dist:./build-output \
   -e "npm install && npm run build"
-
-# Isolated C compilation with dependency caching
-vortex run alpine -q \
-  --copy-to ./src:/build \
-  --workdir /build \
-  --sync-back /build/output:./compiled \
-  --cache-deps \
-  -e "apk add gcc && gcc -o output main.c"
-
-# Python testing with smart caching
-vortex run python:3.9 -q \
-  --copy-to ./myproject:/app \
-  --workdir /app \
-  --cache-deps \
-  -e "pip install -r requirements.txt && python -m pytest"
 ```
 
-### 🚀 Parallel Multi-VM Execution
-
-Run workloads across multiple VMs simultaneously:
-
-```bash
-# Test across different platforms in parallel
-vortex parallel alpine ubuntu debian \
-  -e "echo 'Testing on:' && uname -a && ./run-tests.sh" \
-  --copy-to ./tests:/workspace \
-  --sync-back /workspace/results:/test-results
-
-# Parallel CI/CD pipeline
-vortex parallel node:16 node:18 node:20 \
-  -e "npm install && npm test" \
-  --copy-to ./app:/workspace \
-  --workdir /workspace
-```
-
-### 🖥️ Interactive Shell Mode
-
+### **Interactive Development**
 ```bash
 # Start interactive shell in VM
 vortex shell alpine
 
-# With custom resources and working directory
-vortex shell ubuntu -m 2048 -c 4 -w /workspace \
-  --copy-to ./project:/workspace
-
-# Use with screen for detachable sessions
-screen -S my-vm vortex shell alpine
-# Ctrl+A+D to detach, screen -r my-vm to reattach
-```
-
-### 🏗️ Development Workflows
-
-```bash
-# Rust development environment
-vortex shell rust:alpine -m 4096 \
-  --copy-to ./src:/app/src \
-  --copy-to ./Cargo.toml:/app/Cargo.toml \
-  --workdir /app
-
-# Node.js development with port forwarding
+# Development environment with port forwarding
 vortex shell node:18 -p 3000:3000 \
   --copy-to ./web-app:/workspace \
   --workdir /workspace
-
-# Testing dangerous commands safely
-vortex shell alpine -e "rm -rf /tmp/* && echo 'Safe in VM'"
 ```
 
-### 📊 Performance Monitoring
-
+### **Parallel Execution**
 ```bash
-# Real-time performance monitoring during execution
-vortex run alpine -e "stress --cpu 2 --timeout 30s" --monitor-performance
-
-# View VM metrics
-vortex metrics
-vortex metrics <vm-id>
+# Test across different platforms
+vortex parallel alpine ubuntu debian \
+  -e "echo 'Testing on:' && uname -a" \
+  --copy-to ./tests:/workspace
 ```
-
-### 📊 VM Management
-
-```bash
-# List running VMs
-vortex list
-
-# Stop specific VM
-vortex stop <vm-id>
-
-# Cleanup all VMs
-vortex cleanup
-
-# Show available templates
-vortex templates
-```
-
-### 🎨 Templates
-
-```bash
-# Use predefined templates
-vortex template dev
-vortex template web --command "npm start"
-vortex template minimal --command "apk update"
-```
-
-## ✨ Core Features
-
-### 🎯 **Scriptable Execution**
-- **One-liner workflows**: Complete CI/CD pipelines in single commands
-- **Bidirectional file sync**: Copy files in, get results back automatically
-- **Quiet mode (`-q`)**: Clean output perfect for automation
-- **Working directory control**: Set initial PWD with `--workdir`
-- **Smart dependency caching**: `--cache-deps` for faster subsequent runs
-
-### ⚡ **Performance**
-- **Lightning fast**: VMs boot in ~1 second using krunvm
-- **Auto-cleanup**: VMs destroyed after execution with zero trace
-- **Resource efficient**: Minimal overhead microVMs
-- **Parallel execution**: Run multiple VMs simultaneously
-
-### 🛠️ **Development Features**
-- **Interactive shells**: Full terminal support with proper TTY
-- **File synchronization**: `--copy-to` and `--sync-back` options
-- **Port forwarding**: Expose VM services to host
-- **Volume mounting**: Persistent file sharing
-- **Custom resources**: Configure memory, CPU cores
-- **Real-time monitoring**: Live performance metrics during execution
-
-### 🏷️ **Image Management**
-- **Built-in aliases**: Simple names for common images
-- **Template system**: Predefined development environments
-- **OCI compatibility**: Works with any container image
-
-### 📈 **Monitoring & Metrics**
-- **Real-time metrics**: CPU, memory, disk, network stats
-- **VM listing**: See all running instances
-- **Resource tracking**: Monitor usage across VMs
-- **Performance insights**: Hardware-level visibility
-
-## 🖥️ Built-in Images & Aliases
-
-- `alpine` → `docker.io/library/alpine:latest`
-- `ubuntu` → `docker.io/library/ubuntu:22.04`  
-- `debian` → `docker.io/library/debian:latest`
-- `node` → Node.js development environment
-- `python` → Python development environment
-- `rust` → Rust development environment
-
-## 🎯 Use Cases
-
-### **Isolated Development**
-```bash
-# Safe dependency testing
-vortex shell node:18 --copy-to ./package.json:/app --workdir /app
-
-# Cross-platform builds
-vortex run ubuntu -q --copy-to ./src:/build --workdir /build \
-  --sync-back /build/target:/tmp/linux-build \
-  -e "apt update && apt install -y build-essential && make"
-```
-
-### **CI/CD Pipelines**
-```bash
-# Automated testing across versions
-vortex parallel python:3.8 python:3.9 python:3.10 \
-  --copy-to ./tests:/app/tests \
-  --copy-to ./src:/app/src \
-  --workdir /app \
-  -e "pip install pytest && pytest tests/"
-
-# Documentation generation
-vortex run node:18 -q \
-  --copy-to ./docs:/workspace \
-  --sync-back /workspace/output:./generated-docs \
-  --workdir /workspace \
-  -e "npm install && npm run docs"
-```
-
-### **Security Testing**
-```bash
-# Test potentially dangerous code safely
-vortex shell alpine --copy-to ./suspicious-script:/tmp \
-  -e "chmod +x /tmp/script.sh && /tmp/script.sh"
-
-# Malware analysis in isolation
-vortex run alpine --copy-to ./malware:/analysis \
-  --workdir /analysis \
-  -e "file * && strings suspicious.exe"
-```
-
-### **System-Level Testing**
-```bash
-# Test kernel modules
-vortex shell alpine -e "modprobe overlay && echo 'Module loaded'"
-
-# Boot process testing
-vortex shell ubuntu -e "systemctl --version && systemctl list-units"
-
-# Network isolation verification
-vortex run alpine -e "ip addr show && netstat -rn"
-```
-
-## 🔧 Configuration
-
-Config auto-created at `~/.config/vortex/config.toml`:
-
-```toml
-[image_aliases]
-myapp = "registry.local/myapp:latest"
-dev = "ubuntu:22.04"
-
-[[templates]]
-[templates.fullstack]
-image = "node:18"
-memory = 4096
-cpus = 2
-ports = ["3000:3000", "8080:8080"]
-volumes = ["./:/workspace"]
-command = "bash"
-description = "Full-stack development environment"
-
-[templates.testing]
-image = "python:3.9"
-memory = 2048
-cpus = 1
-command = "pytest"
-description = "Python testing environment"
-```
-
-## 🏗️ Architecture
-
-**Modular Design:**
-- `vortex-core` - Core VM management and abstractions
-- `vortex-dev` - Development-focused extensions  
-- `vortex-research` - Advanced research features
-
-**Technology Stack:**
-- **CLI**: `clap` for robust argument parsing
-- **Backend**: Abstracted for krunvm/Firecracker support
-- **Async**: `tokio` for non-blocking operations  
-- **Config**: TOML-based templates and aliases
-- **Logging**: Structured logging with `tracing`
-- **Metrics**: Real-time VM resource monitoring
-
-## 📦 What's New in v0.3.0
-
-### 🆕 **New Features**
-- ✅ **Parallel multi-VM execution** with `vortex parallel`
-- ✅ **Real-time performance monitoring** with `--monitor-performance`
-- ✅ **Advanced dependency caching** with `--cache-deps`
-- ✅ **Scriptable execution** with `--copy-to` and `--sync-back`
-- ✅ **Quiet mode (`-q`)** for clean automation output  
-- ✅ **Working directory** control with `--workdir`
-- ✅ **Enhanced shell mode** with proper file copying
-
-### 🔧 **Improvements**
-- ✅ **Modular architecture** with workspace structure
-- ✅ **Better error handling** with graceful exits (Ctrl+D works perfectly)
-- ✅ **Clean interface** optimized for both interactive and automated use
-- ✅ **Comprehensive file operations** with validation
-- ✅ **True ephemeral behavior** with complete VM cleanup
-
-### 📝 **Recommendations**
-- **For persistent/detachable VMs**: Use `screen` sessions for better experience
-- **For nano editing**: Use `vi` instead due to terminal compatibility issues
-
-## 🚧 Known Issues
-
-- **Nano editor**: Enter key shows "Justified paragraph" (use `vi` instead)
-- **macOS only**: Currently krunvm-based (Linux Firecracker support planned)
-- **krunvm limitations**: Single command per VM, no true multi-session support
 
 ## 🧪 Testing & Quality Assurance
 
-Vortex maintains a comprehensive test suite with 100% pass rate ensuring reliability and performance.
+Vortex maintains comprehensive test coverage across all features:
 
-### **Test Categories**
-- **🔬 Core Tests**: Library functionality and CLI integration
-- **🔗 Integration Tests**: Workspace operations and DevContainer migration  
-- **⚡ Performance Tests**: Speed benchmarks and scalability validation
-- **🎯 End-to-End Tests**: Complete workflow scenarios
-- **🔒 Security Tests**: Vulnerability scanning and code quality
-
-### **Running Tests Locally**
+### **Running Tests**
 ```bash
-# Run comprehensive test suite (recommended)
+# Comprehensive test suite
 ./test_runner.sh
 
-# Run individual test categories
+# Individual test categories
 cargo test --test cli_integration_test --release
 cargo test --test workspace_integration_tests --release
-cargo test --test workspace_performance_test --release
-
-# Run security audit
-cargo audit
-
-# Format and lint check
-cargo fmt --check
-cargo clippy --release -- -D warnings
 ```
 
 ### **CI/CD Pipeline**
-Vortex uses multi-stage GitHub Actions workflows:
-
-- **🚀 Quick Tests**: Fast validation for every push/PR
-- **🧪 Comprehensive Tests**: Full test suite on main branch
-- **📦 Build Matrix**: Multi-platform builds (Linux, macOS)
-- **🔒 Security Audit**: Vulnerability scanning and unsafe code detection
-- **📊 Performance Benchmarks**: Speed validation and comparison
-- **🎯 Integration Matrix**: Scenario-based testing
-- **🚀 Automated Deployment**: Release creation with validated artifacts
-
-All releases are comprehensively tested and validated before deployment.
+- ✅ Multi-platform builds (Linux, macOS)
+- ✅ Security auditing and vulnerability scanning
+- ✅ Performance benchmarking
+- ✅ Automated deployment with validated artifacts
 
 ## 🤝 Contributing
 
-This is a modular platform designed for extensibility. The workspace structure supports adding new backends, development tools, and research features.
+Vortex is building the future of distributed development environments:
 
-### **Development Workflow**
 1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make changes with comprehensive tests
 4. Run `./test_runner.sh` to validate
-5. Submit a pull request
+5. Submit a Pull Request
 
-The CI system will automatically run quick validation tests on your PR.
+See [ROADMAP.md](ROADMAP.md) for planned features and [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
+## 📜 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+*"The future of development is distributed, isolated, and context-aware. Vortex makes it reality."* 🔥

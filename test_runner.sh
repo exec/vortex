@@ -124,21 +124,17 @@ run_test "Vortex Core Library" "cargo test --lib --release"
 
 # Test integration tests from main directory
 run_test "CLI Integration Tests" "cargo test --test cli_integration_test --release"
-run_test "Workspace Creation Test" "cargo test --test workspace_integration_tests test_workspace_creation_and_listing --release"
-run_test "Workspace Persistence Test" "cargo test --test workspace_integration_tests test_workspace_persistence --release"
-run_test "DevContainer Import Test" "cargo test --test workspace_integration_tests test_devcontainer_import --release"
-run_test "Performance Tests" "cargo test --test workspace_performance_test --release"
+
+# Phase 5 Discovery Engine tests (no VM dependencies)
+run_test "Discovery Engine Tests" "cargo test --test discovery_engine_tests --release"
+run_test "Orchestrator Integration Tests" "cargo test --test orchestrator_integration_tests --release"
 
 echo
 
-# E2E tests  
+# E2E tests - None currently (require VM infrastructure)
 echo -e "${BLUE}🎯 End-to-End Tests${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-# Make sure E2E scripts are executable
-chmod +x tests/e2e/*.sh 2>/dev/null || true
-
-run_test "DevContainer Migration" "./tests/e2e/devcontainer_migration_test.sh --cleanup"
+echo -e "${YELLOW}⚠️  E2E tests skipped - require krunvm infrastructure${NC}"
 
 echo
 

@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::info;
 use vortex::{
-    detect_workspace_info, init, DaemonClient, ResourceLimits, SessionCommand, SessionResponse, VmSpec, VortexConfig, VortexCore, VortexDaemon, VERSION,
+    detect_workspace_info, init, DaemonClient, ResourceLimits, SessionCommand, SessionResponse,
+    VmSpec, VortexConfig, VortexCore, VortexDaemon, VERSION,
 };
 
 #[derive(Parser)]
@@ -513,8 +514,17 @@ async fn main() -> Result<()> {
             } else if let Some(workspace_name) = workspace {
                 start_workspace(&vortex, &workspace_name, quiet).await?;
             } else if let Some(template_name) = template {
-                start_dev_environment(&vortex, &template_name, workdir, volume, port, quiet, name, detach)
-                    .await?;
+                start_dev_environment(
+                    &vortex,
+                    &template_name,
+                    workdir,
+                    volume,
+                    port,
+                    quiet,
+                    name,
+                    detach,
+                )
+                .await?;
             } else {
                 return Err(anyhow::anyhow!(
                     "Template name, workspace, or --list is required"
@@ -557,7 +567,10 @@ async fn main() -> Result<()> {
                 detach,
                 persistent,
             } => {
-                handle_session_create(&vortex, &template, name, memory, cpus, &port, &volume, detach, persistent).await?;
+                handle_session_create(
+                    &vortex, &template, name, memory, cpus, &port, &volume, detach, persistent,
+                )
+                .await?;
             }
             SessionSubcommand::List => {
                 handle_session_list().await?;
@@ -1337,11 +1350,11 @@ async fn start_dev_environment(
             println!("📂 Volumes: {} mount(s)", vm.spec.volumes.len());
         }
         println!("💾 VM ID: {}", vm.id);
-        
+
         if let Some(session_name) = &name {
             println!("📝 Session: {}", session_name);
         }
-        
+
         if detach {
             println!("🔓 Running in background (detached mode)");
             println!("💡 Attach with: vortex attach {}", vm.id);
@@ -1757,30 +1770,30 @@ async fn handle_session_create(
 ) -> Result<()> {
     // Ensure daemon is running
     DaemonClient::start_daemon_if_needed().await?;
-    
+
     // Convert template to VmSpec
-    let mut spec = vortex
-        .dev_env_manager
-        .template_to_vm_spec(template, None)?;
-    
+    let mut spec = vortex.dev_env_manager.template_to_vm_spec(template, None)?;
+
     // Override with user preferences
     spec.memory = memory;
     spec.cpus = cpus;
     spec.ports = parse_port_mappings(ports.to_vec())?;
-    
+
     // Merge volumes
     let additional_volumes = parse_volume_mappings(volumes.to_vec())?;
     for (host, guest) in additional_volumes {
         spec.volumes.insert(host, guest);
     }
-    
+
     let client = DaemonClient::new()?;
-    let response = client.send_command(SessionCommand::CreateSession {
-        spec,
-        name: name.clone(),
-        persistent,
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::CreateSession {
+            spec,
+            name: name.clone(),
+            persistent,
+        })
+        .await?;
+
     match response {
         SessionResponse::SessionCreated { session } => {
             println!("✅ Session created: {}", session.id);
@@ -1789,7 +1802,7 @@ async fn handle_session_create(
             }
             println!("🎯 Template: {}", template);
             println!("🚀 State: {:?}", session.state);
-            
+
             if !detach {
                 println!("🔗 Attaching to session...");
                 handle_attach_session(&session.id).await?;
@@ -1807,20 +1820,20 @@ async fn handle_session_create(
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_session_list() -> Result<()> {
     let client = DaemonClient::new()?;
-    
+
     if !client.is_running().await {
         println!("📴 Daemon is not running. Start it with: vortex daemon start");
         return Ok(());
     }
-    
+
     let response = client.send_command(SessionCommand::ListSessions).await?;
-    
+
     match response {
         SessionResponse::SessionList { sessions } => {
             if sessions.is_empty() {
@@ -1828,10 +1841,10 @@ async fn handle_session_list() -> Result<()> {
                 println!("💡 Create one with: vortex session create <template>");
                 return Ok(());
             }
-            
+
             println!("🔥 Active Sessions:");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            
+
             for session in sessions {
                 let state_emoji = match session.state {
                     vortex::SessionState::Running => "🟢",
@@ -1842,32 +1855,38 @@ async fn handle_session_list() -> Result<()> {
                     vortex::SessionState::Error { .. } => "❌",
                     _ => "⚪",
                 };
-                
+
                 print!("{} {} ", state_emoji, &session.id[..12]);
                 if let Some(name) = &session.name {
                     print!("({}) ", name);
                 }
                 println!("- {:?}", session.state);
-                
+
                 println!("   🖼️  Image: {}", session.spec.image);
-                println!("   💾 Resources: {}MB RAM, {} CPU(s)", session.spec.memory, session.spec.cpus);
-                
+                println!(
+                    "   💾 Resources: {}MB RAM, {} CPU(s)",
+                    session.spec.memory, session.spec.cpus
+                );
+
                 if let Some(last_attached) = session.last_attached {
                     let duration = chrono::Utc::now() - last_attached;
                     if duration.num_hours() > 0 {
                         println!("   ⏰ Last attached: {} hours ago", duration.num_hours());
                     } else {
-                        println!("   ⏰ Last attached: {} minutes ago", duration.num_minutes());
+                        println!(
+                            "   ⏰ Last attached: {} minutes ago",
+                            duration.num_minutes()
+                        );
                     }
                 }
-                
+
                 if session.persistent {
                     println!("   🔒 Persistent session");
                 }
-                
+
                 println!();
             }
-            
+
             println!("💡 Attach to session: vortex attach <session-id>");
             println!("📖 Session details: vortex session info <session-id>");
         }
@@ -1878,62 +1897,73 @@ async fn handle_session_list() -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_session_info(session_id: &str) -> Result<()> {
     let client = DaemonClient::new()?;
-    let response = client.send_command(SessionCommand::GetSession {
-        session_id: session_id.to_string(),
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::GetSession {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
     match response {
         SessionResponse::Session { session } => {
             println!("🔍 Session Details:");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             println!("🆔 ID: {}", session.id);
-            
+
             if let Some(name) = &session.name {
                 println!("📝 Name: {}", name);
             }
-            
+
             println!("🚀 State: {:?}", session.state);
             println!("🖼️  Image: {}", session.spec.image);
-            println!("💾 Resources: {}MB RAM, {} CPU(s)", session.spec.memory, session.spec.cpus);
-            println!("📅 Created: {}", session.created_at.format("%Y-%m-%d %H:%M:%S"));
-            
+            println!(
+                "💾 Resources: {}MB RAM, {} CPU(s)",
+                session.spec.memory, session.spec.cpus
+            );
+            println!(
+                "📅 Created: {}",
+                session.created_at.format("%Y-%m-%d %H:%M:%S")
+            );
+
             if let Some(last_attached) = session.last_attached {
-                println!("⏰ Last attached: {}", last_attached.format("%Y-%m-%d %H:%M:%S"));
+                println!(
+                    "⏰ Last attached: {}",
+                    last_attached.format("%Y-%m-%d %H:%M:%S")
+                );
             }
-            
+
             if session.persistent {
                 println!("🔒 Persistent: Yes");
             } else {
                 println!("🔒 Persistent: No");
             }
-            
+
             if !session.spec.ports.is_empty() {
                 println!("🌐 Port forwards:");
                 for (host, guest) in &session.spec.ports {
                     println!("   {}:{}", host, guest);
                 }
             }
-            
+
             if !session.spec.volumes.is_empty() {
                 println!("📂 Volume mounts:");
                 for (host, guest) in &session.spec.volumes {
                     println!("   {} → {}", host.display(), guest.display());
                 }
             }
-            
+
             if !session.spec.labels.is_empty() {
                 println!("🏷️  Labels:");
                 for (key, value) in &session.spec.labels {
                     println!("   {}={}", key, value);
                 }
             }
-            
+
             match session.state {
                 vortex::SessionState::Detached | vortex::SessionState::Running => {
                     println!("\n💡 Attach with: vortex attach {}", session.id);
@@ -1954,16 +1984,18 @@ async fn handle_session_info(session_id: &str) -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_session_start(session_id: &str) -> Result<()> {
     let client = DaemonClient::new()?;
-    let response = client.send_command(SessionCommand::StartSession {
-        session_id: session_id.to_string(),
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::StartSession {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
     match response {
         SessionResponse::Success => {
             println!("✅ Session {} started", session_id);
@@ -1976,16 +2008,18 @@ async fn handle_session_start(session_id: &str) -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_session_stop(session_id: &str) -> Result<()> {
     let client = DaemonClient::new()?;
-    let response = client.send_command(SessionCommand::StopSession {
-        session_id: session_id.to_string(),
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::StopSession {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
     match response {
         SessionResponse::Success => {
             println!("⏹️  Session {} stopped", session_id);
@@ -1997,16 +2031,18 @@ async fn handle_session_stop(session_id: &str) -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_session_pause(session_id: &str) -> Result<()> {
     let client = DaemonClient::new()?;
-    let response = client.send_command(SessionCommand::PauseSession {
-        session_id: session_id.to_string(),
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::PauseSession {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
     match response {
         SessionResponse::Success => {
             println!("⏸️  Session {} paused", session_id);
@@ -2018,16 +2054,18 @@ async fn handle_session_pause(session_id: &str) -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_session_resume(session_id: &str) -> Result<()> {
     let client = DaemonClient::new()?;
-    let response = client.send_command(SessionCommand::ResumeSession {
-        session_id: session_id.to_string(),
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::ResumeSession {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
     match response {
         SessionResponse::Success => {
             println!("▶️  Session {} resumed", session_id);
@@ -2040,16 +2078,18 @@ async fn handle_session_resume(session_id: &str) -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_session_restart(session_id: &str) -> Result<()> {
     let client = DaemonClient::new()?;
-    let response = client.send_command(SessionCommand::RestartSession {
-        session_id: session_id.to_string(),
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::RestartSession {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
     match response {
         SessionResponse::Success => {
             println!("🔄 Session {} restarted", session_id);
@@ -2062,7 +2102,7 @@ async fn handle_session_restart(session_id: &str) -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
@@ -2070,21 +2110,23 @@ async fn handle_session_delete(session_id: &str, force: bool) -> Result<()> {
     if !force {
         println!("⚠️  This will permanently delete session: {}", session_id);
         println!("Are you sure? [y/N]: ");
-        
+
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
-        
+
         if input.trim().to_lowercase() != "y" {
             println!("❌ Cancelled");
             return Ok(());
         }
     }
-    
+
     let client = DaemonClient::new()?;
-    let response = client.send_command(SessionCommand::DeleteSession {
-        session_id: session_id.to_string(),
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::DeleteSession {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
     match response {
         SessionResponse::Success => {
             println!("🗑️  Session {} deleted", session_id);
@@ -2096,23 +2138,27 @@ async fn handle_session_delete(session_id: &str, force: bool) -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_attach_session(session_id: &str) -> Result<()> {
     let client = DaemonClient::new()?;
-    
+
     if !client.is_running().await {
-        return Err(anyhow::anyhow!("Daemon is not running. Start it with: vortex daemon start"));
+        return Err(anyhow::anyhow!(
+            "Daemon is not running. Start it with: vortex daemon start"
+        ));
     }
-    
+
     let client_pid = std::process::id();
-    let response = client.send_command(SessionCommand::AttachSession {
-        session_id: session_id.to_string(),
-        client_pid,
-    }).await?;
-    
+    let response = client
+        .send_command(SessionCommand::AttachSession {
+            session_id: session_id.to_string(),
+            client_pid,
+        })
+        .await?;
+
     match response {
         SessionResponse::Success => {
             println!("✅ Attached to session {}", session_id);
@@ -2125,7 +2171,7 @@ async fn handle_attach_session(session_id: &str) -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
@@ -2137,12 +2183,12 @@ async fn handle_list_sessions() -> Result<()> {
 
 async fn handle_daemon_start(background: bool) -> Result<()> {
     let client = DaemonClient::new()?;
-    
+
     if client.is_running().await {
         println!("📴 Daemon is already running");
         return Ok(());
     }
-    
+
     if background {
         // Start daemon in background by spawning a new process
         let current_exe = std::env::current_exe()?;
@@ -2150,12 +2196,12 @@ async fn handle_daemon_start(background: bool) -> Result<()> {
             .arg("daemon")
             .arg("start")
             .spawn()?;
-        
+
         println!("🚀 Daemon starting in background (PID: {})", child.id());
-        
+
         // Wait a moment for it to start
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        
+
         if client.is_running().await {
             println!("✅ Daemon started successfully");
         } else {
@@ -2166,35 +2212,37 @@ async fn handle_daemon_start(background: bool) -> Result<()> {
         println!("🚀 Starting Vortex daemon...");
         let vortex = init().await?;
         let daemon = VortexDaemon::new(vortex.session_manager).await?;
-        
+
         // Handle Ctrl+C gracefully
         let daemon_ref = Arc::new(daemon);
         let daemon_clone = daemon_ref.clone();
-        
+
         tokio::spawn(async move {
-            tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to listen for Ctrl+C");
             println!("\n🛑 Shutting down daemon...");
             if let Err(e) = daemon_clone.stop().await {
                 eprintln!("Error stopping daemon: {}", e);
             }
         });
-        
+
         daemon_ref.start().await?;
     }
-    
+
     Ok(())
 }
 
 async fn handle_daemon_stop() -> Result<()> {
     let client = DaemonClient::new()?;
-    
+
     if !client.is_running().await {
         println!("📴 Daemon is not running");
         return Ok(());
     }
-    
+
     let response = client.send_command(SessionCommand::Shutdown).await?;
-    
+
     match response {
         SessionResponse::Success => {
             println!("🛑 Daemon stopped");
@@ -2206,30 +2254,35 @@ async fn handle_daemon_stop() -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_daemon_status() -> Result<()> {
     let client = DaemonClient::new()?;
-    
+
     if !client.is_running().await {
         println!("📴 Daemon Status: Not Running");
         println!("💡 Start with: vortex daemon start");
         return Ok(());
     }
-    
+
     let response = client.send_command(SessionCommand::GetDaemonStatus).await?;
-    
+
     match response {
-        SessionResponse::DaemonStatus { uptime, sessions_count, active_vms, memory_usage } => {
+        SessionResponse::DaemonStatus {
+            uptime,
+            sessions_count,
+            active_vms,
+            memory_usage,
+        } => {
             println!("🚀 Daemon Status: Running");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            
+
             let hours = uptime / 3600;
             let minutes = (uptime % 3600) / 60;
             let seconds = uptime % 60;
-            
+
             if hours > 0 {
                 println!("⏰ Uptime: {}h {}m {}s", hours, minutes, seconds);
             } else if minutes > 0 {
@@ -2237,11 +2290,14 @@ async fn handle_daemon_status() -> Result<()> {
             } else {
                 println!("⏰ Uptime: {}s", seconds);
             }
-            
+
             println!("📊 Sessions: {}", sessions_count);
             println!("🔥 Active VMs: {}", active_vms);
-            println!("💾 Memory Usage: {:.1}MB", memory_usage as f64 / 1024.0 / 1024.0);
-            
+            println!(
+                "💾 Memory Usage: {:.1}MB",
+                memory_usage as f64 / 1024.0 / 1024.0
+            );
+
             println!("\n💡 List sessions: vortex sessions");
             println!("📖 Session details: vortex session info <id>");
         }
@@ -2252,22 +2308,22 @@ async fn handle_daemon_status() -> Result<()> {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_daemon_restart() -> Result<()> {
     println!("🔄 Restarting daemon...");
-    
+
     // Stop first
     if DaemonClient::new()?.is_running().await {
         handle_daemon_stop().await?;
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
-    
+
     // Start again
     handle_daemon_start(true).await?;
-    
+
     Ok(())
 }
 

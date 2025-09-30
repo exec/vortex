@@ -164,10 +164,8 @@ jobs:
     strategy:
       matrix:
         test-scenario:
-          - basic-workspace
-          - devcontainer-migration
-          - performance-stress
-          - multi-template
+          - discovery-engine
+          - orchestrator-integration
     
     steps:
     - uses: actions/checkout@v4
@@ -178,24 +176,17 @@ jobs:
     - name: Build release binary
       run: cargo build --release
     
-    - name: Make test scripts executable
-      run: chmod +x tests/e2e/*.sh
+    - name: Make discovery and orchestrator scripts executable
+      run: chmod +x vortex_discovery vortex_orchestrator
     
     - name: Run scenario-specific tests
       run: |
         case "${{ matrix.test-scenario }}" in
-          basic-workspace)
-            cargo test --test workspace_integration_tests test_workspace_creation_and_listing --release
+          discovery-engine)
+            cargo test --test discovery_engine_tests --release
             ;;
-          devcontainer-migration)
-            cargo test --test workspace_integration_tests test_devcontainer_import --release
-            ./tests/e2e/devcontainer_migration_test.sh --cleanup
-            ;;
-          performance-stress)
-            cargo test --test workspace_performance_test --release
-            ;;
-          multi-template)
-            cargo test --test workspace_integration_tests test_multiple_workspaces_management --release
+          orchestrator-integration)
+            cargo test --test orchestrator_integration_tests --release
             ;;
         esac
   

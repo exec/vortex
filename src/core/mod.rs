@@ -58,7 +58,7 @@ impl VortexCore {
     pub async fn new() -> Result<Self> {
         let vm_manager = std::sync::Arc::new(VmManager::new().await?);
         let session_manager = SessionManager::new(vm_manager.clone()).await?;
-        
+
         Ok(Self {
             vm_manager,
             session_manager,
@@ -83,8 +83,15 @@ impl VortexCore {
     }
 
     /// Create a new session with optional persistence
-    pub async fn create_session(&self, spec: VmSpec, name: Option<String>, persistent: bool) -> Result<VmSession> {
-        self.session_manager.create_session(spec, name, persistent).await
+    pub async fn create_session(
+        &self,
+        spec: VmSpec,
+        name: Option<String>,
+        persistent: bool,
+    ) -> Result<VmSession> {
+        self.session_manager
+            .create_session(spec, name, persistent)
+            .await
     }
 
     /// List all sessions
@@ -95,7 +102,9 @@ impl VortexCore {
     /// Attach to a session by ID
     pub async fn attach_session(&self, session_id: &str) -> Result<()> {
         let client_pid = std::process::id();
-        self.session_manager.attach_session(session_id, client_pid).await
+        self.session_manager
+            .attach_session(session_id, client_pid)
+            .await
     }
 
     /// Stop a session
