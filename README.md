@@ -100,6 +100,8 @@ services:
 
 Vortex automatically detects project structure and suggests optimal VM configurations:
 
+### Language Detection
+
 | File Found | Language | Suggested Image | Default Ports |
 |------------|----------|----------------|---------------|
 | `package.json` | Node.js | `node:18-alpine` | 3000, 3001 |
@@ -108,53 +110,126 @@ Vortex automatically detects project structure and suggests optimal VM configura
 | `Cargo.toml` | Rust | `rust:1.70` | 8080 |
 | `composer.json` | PHP | `php:8.2-fpm-alpine` | 9000 |
 | `Gemfile` | Ruby | `ruby:3.2-alpine` | 3000 |
+| `build.sbt` | Scala | `scala:3.3-alpine` | 8080 |
+| `pom.xml` | Java | `openjdk:17-slim` | 8080 |
 
-**Service Type Detection:**
-- `frontend/`, `ui/`, `web/` → Frontend service with hot reload
-- `backend/`, `api/`, `server/` → Backend API service
-- `worker/`, `jobs/`, `tasks/` → Background worker service
-- `database/`, `migrations/` → Database service
+### Service Type Detection
+
+| Directory | Service Type | Features |
+|-----------|--------------|----------|
+| `frontend/`, `ui/`, `web/` | Frontend | Hot reload, static serving |
+| `backend/`, `api/`, `server/` | Backend | API routing, middleware |
+| `worker/`, `jobs/`, `tasks/` | Worker | Background processing |
+| `database/`, `migrations/` | Database | Persistent storage |
+| `cache/`, `redis/` | Cache | Fast key-value storage |
+
+### Service Port Mapping
+
+When Vortex detects services, it automatically maps common ports:
+- Frontend: 3000, 8080, 5173 (Vite), 3001
+- Backend: 8000, 8080, 3000, 5000
+- Database: 5432 (PostgreSQL), 3306 (MySQL), 27017 (MongoDB)
+- Cache: 6379 (Redis), 11211 (Memcached)
 
 ## 🎪 Workspace Templates
 
-### 🌐 Full-Stack Web App
-- ⚛️ **Frontend**: React with hot reload (3000:3000)
-- 🐍 **Backend**: FastAPI with auto-reload (8000:8000)
-- 🐘 **Database**: PostgreSQL with persistence (5432:5432)
-- 🔴 **Cache**: Redis for sessions (6379:6379)
+Vortex provides pre-configured templates for common development stacks:
 
-### 🔬 Microservices Platform
-- 🚪 **API Gateway**: Load balancing and routing (8080:8080)
-- 👤 **User Service**: Go microservice (8001:8000)
-- 📦 **Order Service**: Go microservice (8002:8000)
-- 📡 **Message Queue**: NATS for service communication (4222:4222)
-- 🍃 **Database**: MongoDB for microservices (27017:27017)
+### 🐍 Python Template
+Complete Python development environment with:
+- Python 3.11 slim base image
+- pip, virtualenv, and debugging tools
+- Default port: 8000 (FastAPI/Flask)
+- IDE extensions: Python, DebugPy
 
-### 🤖 AI/ML Pipeline
-- 📓 **Jupyter Lab**: TensorFlow with GPU support (8888:8888)
-- 🧠 **ML API**: FastAPI model serving (8000:8000)
-- ⚙️ **Data Processor**: ETL pipeline
-- 🐘 **Database**: PostgreSQL for ML data (5432:5432)
-- 🔴 **Cache**: Redis for job queues (6379:6379)
+### 🟦 Node.js Template
+Node.js development with:
+- Node 18 Alpine base image
+- npm, yarn, and development tools
+- Default ports: 3000, 8080, 9229 (Node Inspector)
+- IDE extensions: TypeScript Next
+
+### 🦀 Rust Template
+Rust development environment:
+- Rust 1.75 slim base image
+- cargo, rustc, rustfmt, clippy
+- Default port: 8000
+- IDE extensions: rust-analyzer
+
+### ⚡ Go Template
+Go development with:
+- Golang 1.21 Alpine base image
+- go, gofmt, git
+- Default ports: 8080, 2345 (Delve debugger)
+- IDE extensions: Go
+
+### 🤖 AI/ML Template
+AI/ML development environment:
+- Python 3.11 slim base
+- PyTorch, TensorFlow, Jupyter
+- Default ports: 8888 (Jupyter), 6006 (TensorBoard)
+- IDE extensions: Python, Jupyter
 
 ## 🛠 Installation
 
 ### Prerequisites
-- macOS or Linux
-- [krunvm](https://github.com/containers/krunvm) installed
-- Docker/Podman for container images
+- macOS or Linux (Windows support coming soon)
+- For VM creation: [krunvm](https://github.com/containers/krunvm) or Firecracker
+- Docker/Podman for container images (optional for development)
 
 ### Install Vortex
+
+#### From Source
 ```bash
 git clone https://github.com/exec/vortex.git
 cd vortex
 cargo build --release
 
-# Use the session manager
-vortex session list
-vortex session create python myproject
+# Install to system path
+sudo cp target/release/vortex /usr/local/bin/
 
-# Initialize a new workspace with auto-discovery
+# Verify installation
+vortex --version
+```
+
+#### Using the Install Script
+```bash
+curl -fsSL https://raw.githubusercontent.com/exec/vortex/main/install.sh | bash
+```
+
+### Backend Options
+
+Vortex supports multiple VM backends:
+
+| Backend | Description | Installation |
+|---------|-------------|--------------|
+| **krunvm** | Lightweight VM runtime for Linux | `cargo install krunvm` or follow [krunvm docs](https://github.com/containers/krunvm) |
+| **firecracker** | AWS microVM runtime | Follow [Firecracker docs](https://github.com/firecracker-microvm/firecracker) |
+
+### Config-Only Operations
+Vortex can generate workspace configurations without a backend:
+```bash
+# Generate vortex.yaml without any backend installed
+vortex workspace init --non-interactive
+vortex workspace create myapp --template python
+
+# Use --backend flag to specify backend
+vortex workspace init --backend krunvm
+vortex workspace init --backend firecracker
+```
+
+### Verify Installation
+```bash
+# Show version
+vortex --version
+
+# List available commands
+vortex help
+
+# List templates
+vortex templates
+
+# Initialize a new workspace
 vortex workspace init
 ```
 
@@ -206,7 +281,7 @@ vortex workspace cluster scale up
 - **Phase 9**: Advanced orchestration (dependencies, scaling)
 - **Phase 10**: Cloud deployment and team collaboration
 
-See [ROADMAP.md](ROADMAP.md) for detailed development plans.
+See [TODO.md](TODO.md) for detailed development plans.
 
 ## 🌟 Examples
 
@@ -339,11 +414,93 @@ Vortex is building the future of distributed development environments:
 4. Run `./test_runner.sh` to validate
 5. Submit a Pull Request
 
-See [ROADMAP.md](ROADMAP.md) for planned features and [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+See [TODO.md](TODO.md) for planned features and [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## 📜 License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 📚 CLI Reference
+
+### Core Commands
+
+| Command | Description |
+|---------|-------------|
+| `vortex --help` | Show help message |
+| `vortex --version` | Show version information |
+| `vortex --verbose` | Enable verbose logging |
+
+### Workspace Commands
+
+| Command | Description |
+|---------|-------------|
+| `vortex workspace init` | Initialize workspace interactively |
+| `vortex workspace init --non-interactive` | Auto-scan and generate config |
+| `vortex workspace init --backend krunvm` | Specify backend (krunvm/firecracker) |
+| `vortex workspace init --output ./path/to/config.yaml` | Custom output path |
+| `vortex workspace create <name>` | Create new workspace from template |
+| `vortex workspace create <name> --template python` | Specify template |
+| `vortex workspace create <name> --backend firecracker` | Specify backend |
+| `vortex workspace list` | List all workspaces |
+| `vortex workspace info <name>` | Show workspace details |
+| `vortex workspace delete <name>` | Delete workspace |
+
+### Dev Commands
+
+| Command | Description |
+|---------|-------------|
+| `vortex dev <template>` | Create dev environment |
+| `vortex dev <template> --name <name>` | Named session |
+| `vortex dev <template> --workspace <name>` | Use persistent workspace |
+| `vortex dev <template> --detach` | Run in background |
+| `vortex dev --list` | List available templates |
+| `vortex dev --init` | Initialize from current directory |
+| `vortex dev <template> --port 8080:8080` | Port forwarding |
+| `vortex dev <template> --volume ./src:/workspace` | Volume mount |
+
+### Session Commands
+
+| Command | Description |
+|---------|-------------|
+| `vortex session create <template> <name>` | Create new session |
+| `vortex session list` | List all sessions |
+| `vortex session info <id>` | Show session details |
+| `vortex session start <id>` | Start stopped session |
+| `vortex session stop <id>` | Stop running session |
+| `vortex session attach <id>` | Attach to session |
+| `vortex session delete <id>` | Delete session |
+
+### Single-VM Commands
+
+| Command | Description |
+|---------|-------------|
+| `vortex run <image>` | Run single ephemeral VM |
+| `vortex run <image> --command "echo hello"` | Run command |
+| `vortex run <image> -p 8080:8080` | Port forwarding |
+| `vortex shell <image>` | Interactive shell |
+| `vortex templates` | Show available templates |
+
+### Daemon Commands
+
+| Command | Description |
+|---------|-------------|
+| `vortex daemon start` | Start background daemon |
+| `vortex daemon stop` | Stop daemon |
+| `vortex daemon status` | Show daemon status |
+| `vortex daemon logs` | Show daemon logs |
+
+### Session Management Commands
+
+| Command | Description |
+|---------|-------------|
+| `vortex list` | List running VMs |
+| `vortex stop <vm_id>` | Stop VM |
+| `vortex cleanup` | Stop all running VMs |
+| `vortex attach <session>` | Attach to session |
+| `vortex metrics <vm_id>` | Show VM metrics |
+| `vortex parallel [images...]` | Run across multiple VMs |
 
 ---
 

@@ -5,15 +5,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::info;
 use vortex::{
-    detect_workspace_info, init, DaemonClient, ResourceLimits, SessionCommand, SessionResponse, WorkspaceInfo,
-    VmSpec, VortexConfig, VortexCore, VortexDaemon, VERSION,
+    detect_workspace_info, init, DaemonClient, ResourceLimits, SessionCommand, SessionResponse,
+    VmSpec, VortexConfig, VortexCore, VortexDaemon, WorkspaceInfo, VERSION,
 };
 
 #[derive(Parser)]
 #[command(
     name = "vortex",
     about = "Vortex - Lightning-fast ephemeral VM platform",
-    version = "0.4.1"
+    version = "0.5.0"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -240,6 +240,13 @@ enum WorkspaceCommand {
 
         #[arg(long, help = "Source directory to copy (defaults to current dir)")]
         source: Option<PathBuf>,
+
+        #[arg(
+            long,
+            help = "VM backend to use (krunvm or firecracker)",
+            default_value = "krunvm"
+        )]
+        backend: String,
     },
 
     #[command(about = "Delete a workspace")]
@@ -268,18 +275,39 @@ enum WorkspaceCommand {
 
         #[arg(long, help = "Source directory (defaults to current dir)")]
         source: Option<PathBuf>,
+
+        #[arg(
+            long,
+            help = "VM backend to use (krunvm or firecracker)",
+            default_value = "krunvm"
+        )]
+        backend: String,
     },
 
     #[command(about = "Initialize a new workspace with interactive setup")]
     Init {
-        #[arg(help = "Directory to scan (defaults to current dir)", default_value = ".")]
+        #[arg(
+            help = "Directory to scan (defaults to current dir)",
+            default_value = "."
+        )]
         directory: PathBuf,
 
-        #[arg(long, help = "Output path for vortex.yaml", default_value = "vortex.yaml")]
+        #[arg(
+            long,
+            help = "Output path for vortex.yaml",
+            default_value = "vortex.yaml"
+        )]
         output: PathBuf,
 
         #[arg(long, help = "Non-interactive mode - auto-scan and generate")]
         non_interactive: bool,
+
+        #[arg(
+            long,
+            help = "VM backend to use (krunvm or firecracker)",
+            default_value = "krunvm"
+        )]
+        backend: String,
     },
 }
 
@@ -446,6 +474,7 @@ async fn main() -> Result<()> {
                 labels: parse_labels(label)?,
                 network_config: None,
                 resource_limits: ResourceLimits::default(),
+                backend: None,
             };
 
             run_vm(
@@ -548,8 +577,9 @@ async fn main() -> Result<()> {
                 name,
                 template,
                 source,
+                backend,
             } => {
-                create_workspace(&vortex, &name, &template, &source).await?;
+                create_workspace(&vortex, &name, &template, &source, &backend).await?;
             }
             WorkspaceCommand::Delete { workspace } => {
                 delete_workspace(&vortex, &workspace).await?;
@@ -561,15 +591,18 @@ async fn main() -> Result<()> {
                 name,
                 devcontainer,
                 source,
+                backend,
             } => {
-                import_devcontainer_workspace(&vortex, &name, &devcontainer, &source).await?;
+                import_devcontainer_workspace(&vortex, &name, &devcontainer, &source, &backend).await?;
             }
             WorkspaceCommand::Init {
                 directory,
                 output,
                 non_interactive,
+                backend,
             } => {
-                handle_workspace_init(&vortex, &directory, &output, non_interactive).await?;
+                // Workspace init can work without a backend for config generation
+                handle_workspace_init(&directory, &output, non_interactive, &backend).await?;
             }
         },
         Commands::Session { command } => match command {
@@ -820,6 +853,7 @@ async fn run_template(
         labels: template.labels.clone(),
         network_config: None,
         resource_limits: ResourceLimits::default(),
+        backend: None,
     };
 
     run_vm(
@@ -921,6 +955,7 @@ async fn start_shell(
         labels: HashMap::new(),
         network_config: None,
         resource_limits: ResourceLimits::default(),
+        backend: None,
     };
 
     let vm = vortex.create_vm(spec).await?;
@@ -1202,6 +1237,7 @@ async fn run_parallel_vms(
                 labels: HashMap::new(),
                 network_config: None,
                 resource_limits: ResourceLimits::default(),
+                backend: None,
             };
 
             let vm_start = Instant::now();
@@ -1567,6 +1603,7 @@ async fn create_workspace(
     name: &str,
     template: &str,
     source: &Option<PathBuf>,
+    backend: &str,
 ) -> Result<()> {
     let source_dir = source
         .as_ref()
@@ -1578,13 +1615,27 @@ async fn create_workspace(
         return Err(anyhow::anyhow!("Template '{}' not found", template));
     }
 
+    // For now, we'll store the backend in the workspace config
+    // The backend field is stored in VortexWorkspaceConfig
     let workspace = vortex
         .workspace_manager
         .create_workspace(name, template, Some(source_dir))?;
 
+    // Store backend preference in workspace config
+    if let Some(mut config) = vortex
+        .workspace_manager
+        .get_workspace(&workspace.id)?
+    {
+        config.config.backend = Some(backend.to_string());
+        vortex
+            .workspace_manager
+            .save_workspace_config(&workspace.id, &config.config)?;
+    }
+
     println!("✅ Workspace '{}' created!", workspace.name);
     println!("📁 Path: {}", workspace.path.display());
     println!("🎯 Template: {}", workspace.config.template);
+    println!("⚙️  Backend: {}", backend);
     println!("🚀 Start with: vortex dev --workspace {}", workspace.name);
 
     Ok(())
@@ -1725,6 +1776,7 @@ async fn import_devcontainer_workspace(
     name: &str,
     devcontainer_path: &Path,
     source: &Option<PathBuf>,
+    backend: &str,
 ) -> Result<()> {
     let source_dir = source
         .as_ref()
@@ -1743,6 +1795,14 @@ async fn import_devcontainer_workspace(
             .workspace_manager
             .create_from_devcontainer(name, devcontainer_path, source_dir)?;
 
+    // Store backend preference in workspace config
+    if let Some(mut config) = vortex.workspace_manager.get_workspace(&workspace.id)? {
+        config.config.backend = Some(backend.to_string());
+        vortex
+            .workspace_manager
+            .save_workspace_config(&workspace.id, &config.config)?;
+    }
+
     println!(
         "✅ Workspace '{}' imported from devcontainer!",
         workspace.name
@@ -1750,6 +1810,7 @@ async fn import_devcontainer_workspace(
     println!("📦 DevContainer: {}", devcontainer_path.display());
     println!("📁 Path: {}", workspace.path.display());
     println!("🎯 Detected template: {}", workspace.config.template);
+    println!("⚙️  Backend: {}", backend);
 
     if !workspace.config.port_forwards.is_empty() {
         println!(
@@ -1772,10 +1833,10 @@ async fn import_devcontainer_workspace(
 // Workspace initialization with interactive discovery
 
 async fn handle_workspace_init(
-    vortex: &Arc<VortexCore>,
     directory: &Path,
     output: &Path,
     non_interactive: bool,
+    backend: &str,
 ) -> Result<()> {
     println!();
     println!("🔍 Scanning project directory: {}", directory.display());
@@ -1788,22 +1849,32 @@ async fn handle_workspace_init(
             // Non-interactive mode: Generate config directly
             println!("✅ Detected project: {}", info.name);
             println!("   Template: {}", info.suggested_template);
+            println!("   Backend: {}", backend);
 
             let vortex_config_path = output;
-            generate_vortex_yaml_from_info(&info, vortex_config_path)?;
+            generate_vortex_yaml_from_info(&info, vortex_config_path, backend)?;
 
             println!(
                 "✅ Configuration saved to: {}",
                 vortex_config_path.display()
             );
-            println!("🚀 Run: vortex workspace create <name> --template <template> --source {}", directory.display());
+            println!(
+                "🚀 Run: vortex workspace create <name> --template <template> --source {}",
+                directory.display()
+            );
         } else {
             // Interactive mode: Ask user questions
-            interactive_workspace_init(vortex, &info, directory, output).await?;
+            interactive_workspace_init(&info, directory, output, backend).await?;
         }
     } else {
         // No project detected - use interactive mode
-        interactive_workspace_init(vortex, &default_workspace_info(directory), directory, output).await?;
+        interactive_workspace_init(
+            &default_workspace_info(directory),
+            directory,
+            output,
+            backend,
+        )
+        .await?;
     }
 
     Ok(())
@@ -1821,11 +1892,12 @@ fn default_workspace_info(directory: &Path) -> WorkspaceInfo {
     }
 }
 
-fn generate_vortex_yaml_from_info(info: &WorkspaceInfo, output_path: &Path) -> Result<()> {
+fn generate_vortex_yaml_from_info(info: &WorkspaceInfo, output_path: &Path, backend: &str) -> Result<()> {
     // Simple YAML generation for now
     let yaml = format!(
         r#"name: {}
 description: Auto-generated workspace for {}
+backend: {}
 
 services:
   default:
@@ -1835,7 +1907,7 @@ services:
     ports:
       - 8000:8000
 "#,
-        info.name, info.name
+        info.name, info.name, backend
     );
 
     std::fs::write(output_path, yaml)?;
@@ -1843,20 +1915,21 @@ services:
 }
 
 async fn interactive_workspace_init(
-    _vortex: &Arc<VortexCore>,
     info: &WorkspaceInfo,
     _directory: &Path,
     _output: &Path,
+    backend: &str,
 ) -> Result<()> {
     // Interactive mode - ask user questions
     println!("✅ Detected project: {}", info.name);
     println!("   Template: {}", info.suggested_template);
+    println!("   Backend: {}", backend);
     println!();
 
     // In a real implementation, we'd ask user questions here
     // For now, just generate the config
     let output = Path::new("vortex.yaml");
-    generate_vortex_yaml_from_info(info, output)?;
+    generate_vortex_yaml_from_info(info, output, backend)?;
 
     println!("✅ Configuration saved to: vortex.yaml");
     println!("🚀 Run: vortex workspace create <name> --template <template>");

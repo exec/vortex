@@ -264,6 +264,7 @@ impl DevEnvironmentManager {
             ]),
             network_config: None,
             resource_limits: crate::vm::ResourceLimits::default(),
+            backend: None,
         };
 
         Ok(spec)

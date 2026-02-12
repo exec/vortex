@@ -66,6 +66,7 @@ pub struct VortexWorkspaceConfig {
     pub preferred_workdir: String,
     pub environment_vars: HashMap<String, String>,
     pub port_forwards: Vec<u16>,
+    pub backend: Option<String>,
 
     /// If present, indicates this workspace was created from a devcontainer.json
     pub devcontainer_source: Option<String>,
@@ -120,6 +121,7 @@ impl WorkspaceManager {
             preferred_workdir: "/workspace".to_string(),
             environment_vars: HashMap::new(),
             port_forwards: Vec::new(),
+            backend: None,
             devcontainer_source: None,
         };
 
@@ -171,6 +173,7 @@ impl WorkspaceManager {
                 .forward_ports
                 .clone()
                 .unwrap_or_default(),
+            backend: None,
             devcontainer_source: Some(devcontainer_path.to_string_lossy().to_string()),
         };
 
@@ -275,6 +278,7 @@ impl WorkspaceManager {
             ]),
             network_config: None,
             resource_limits: crate::vm::ResourceLimits::default(),
+            backend: workspace.config.backend.clone(),
         };
 
         // Add workspace volume mount
@@ -308,7 +312,7 @@ impl WorkspaceManager {
         Ok(spec)
     }
 
-    fn save_workspace_config(
+    pub fn save_workspace_config(
         &self,
         workspace_id: &str,
         config: &VortexWorkspaceConfig,

@@ -6,8 +6,9 @@ Thank you for your interest in contributing to Vortex! This document provides gu
 
 ### Prerequisites
 - **Rust**: Latest stable version (1.70+)
-- **macOS**: Currently required for krunvm support
+- **Linux or macOS**: Vortex runs on Linux and macOS
 - **Git**: For version control
+- **For VM operations**: krunvm or Firecracker (for full testing)
 
 ### Development Setup
 ```bash
@@ -20,6 +21,11 @@ cargo build --release
 
 # Run tests to verify setup
 ./test_runner.sh
+
+# Check code quality
+cargo fmt
+cargo clippy --release -- -D warnings
+cargo audit
 ```
 
 ## 🧪 Testing
@@ -34,7 +40,7 @@ Vortex maintains a comprehensive test suite with 100% pass rate. Before submitti
 # Individual test categories
 cargo test --test cli_integration_test --release
 cargo test --test workspace_integration_tests --release
-cargo test --test workspace_performance_test --release
+cargo test --test discovery_engine_tests --release
 
 # Code quality checks
 cargo fmt --check
@@ -47,6 +53,14 @@ cargo audit
 - **Add tests for new features**: Include comprehensive test coverage
 - **Performance benchmarks**: Maintain speed targets
 - **Security validation**: No unsafe code or vulnerabilities
+
+### Testing Without Backend
+If krunvm/Firecracker is not installed, configuration-only tests will pass:
+```bash
+# Config-only operations work without backend
+cargo test --lib --release
+cargo test --test cli_integration_test --release
+```
 
 ## 📝 Code Standards
 
@@ -80,18 +94,26 @@ test(integration): add workspace persistence tests
 ### Project Structure
 ```
 vortex/
-├── src/                    # Main CLI application
-├── vortex-core/           # Core VM management library
-├── vortex-dev/            # Development tools and extensions
-├── vortex-research/       # Experimental features
-├── tests/                 # Integration and E2E tests
-├── docs/                  # Documentation
-└── .github/workflows/     # CI/CD pipelines
+├── src/                   # Main CLI application
+│   ├── main.rs           # CLI entry point and command handling
+│   └── core/             # Core VM management library
+│       ├── backend.rs    # Backend trait and implementations
+│       ├── vm.rs         # VM instance management
+│       ├── session.rs    # Session management
+│       ├── workspace.rs  # Workspace management
+│       └── ...
+├── discovery/            # Project discovery module
+│   └── mod.rs           # Language and service detection
+├── vortex-dev/           # Development tools and extensions
+├── vortex-research/      # Experimental features
+├── tests/                # Integration and E2E tests
+├── docs/                 # Documentation
+└── .github/workflows/    # CI/CD pipelines
 ```
 
 ### Key Components
 - **CLI Interface**: `src/main.rs` - User-facing commands
-- **Core Library**: `vortex-core/` - VM management abstractions
+- **Core Library**: `src/core/` - VM management abstractions
 - **Workspace System**: Persistent development environments
 - **Template Engine**: Pre-configured dev environments
 - **DevContainer Support**: Docker migration compatibility
@@ -179,7 +201,7 @@ vortex/
 - **Performance Optimization**: Maintain 20x speed advantage
 - **Cross-platform Support**: Linux and Windows
 
-### Future Vision (v0.4.x+)
+### Future Vision (v0.5.x+)
 - **Plugin Ecosystem**: Third-party extensions
 - **Advanced Networking**: Complex network topologies
 - **Enterprise Features**: Team management and compliance

@@ -181,7 +181,10 @@ impl Scanner {
 
         // Scan subdirectories for services
         let mut services = vec![];
-        let has_devcontainer = self.directory.join(".devcontainer/devcontainer.json").exists();
+        let has_devcontainer = self
+            .directory
+            .join(".devcontainer/devcontainer.json")
+            .exists();
 
         // Get all subdirectories
         let entries = std::fs::read_dir(&self.directory)
@@ -323,8 +326,17 @@ mod tests {
 
     #[test]
     fn test_service_type_detection() {
-        assert_eq!(ServiceType::from_directory_name("frontend"), ServiceType::Frontend);
-        assert_eq!(ServiceType::from_directory_name("backend"), ServiceType::Backend);
-        assert_eq!(ServiceType::from_directory_name("database"), ServiceType::Database);
+        assert_eq!(
+            ServiceType::from_directory_name("frontend"),
+            ServiceType::Frontend
+        );
+        assert_eq!(
+            ServiceType::from_directory_name("backend"),
+            ServiceType::Backend
+        );
+        assert_eq!(
+            ServiceType::from_directory_name("database"),
+            ServiceType::Database
+        );
     }
 }

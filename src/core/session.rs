@@ -121,12 +121,6 @@ impl SessionManager {
             daemon_start_time: Utc::now(),
         };
 
-        // Load existing sessions
-        manager.load_sessions().await?;
-
-        // Reconcile with actual VMs
-        manager.reconcile_sessions().await?;
-
         Ok(manager)
     }
 
@@ -160,22 +154,27 @@ impl SessionManager {
         let mut session_map = self.sessions.write().await;
         *session_map = sessions;
 
-        tracing::info!("Loaded {} sessions from disk", session_map.len());
         Ok(())
     }
 
     async fn save_sessions(&self) -> Result<()> {
         let sessions = self.sessions.read().await;
+
+        // Skip save if no sessions (empty map)
+        if sessions.is_empty() {
+            return Ok(());
+        }
+
         let content =
             serde_json::to_string_pretty(&*sessions).map_err(|e| VortexError::VmError {
                 message: format!("Failed to serialize sessions: {}", e),
             })?;
 
-        tokio::fs::write(&self.session_file, content)
-            .await
-            .map_err(|e| VortexError::VmError {
-                message: format!("Failed to write sessions file: {}", e),
-            })?;
+        // Use std::fs::write directly - it's fast enough for small files
+        // and avoids async runtime issues
+        std::fs::write(&self.session_file, &content).map_err(|e| VortexError::VmError {
+            message: format!("Failed to write sessions file: {}", e),
+        })?;
 
         Ok(())
     }
@@ -213,6 +212,8 @@ impl SessionManager {
             }
         }
 
+        // Drop the write lock before saving sessions
+        drop(sessions);
         self.save_sessions().await?;
         Ok(())
     }

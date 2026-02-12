@@ -114,11 +114,11 @@ Automatically generated for each release:
 
 ```bash
 # macOS (ARM64)
-curl -L https://github.com/exec/vortex/releases/download/v0.3.1/vortex-macos-arm64.tar.gz | tar xz
+curl -L https://github.com/exec/vortex/releases/download/v0.5.0/vortex-macos-arm64.tar.gz | tar xz
 sudo mv vortex /usr/local/bin/
 
 # Linux (AMD64)  
-curl -L https://github.com/exec/vortex/releases/download/v0.3.1/vortex-linux-amd64.tar.gz | tar xz
+curl -L https://github.com/exec/vortex/releases/download/v0.5.0/vortex-linux-amd64.tar.gz | tar xz
 sudo mv vortex /usr/local/bin/
 ```
 

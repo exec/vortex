@@ -5,6 +5,26 @@ All notable changes to Vortex will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🚀 Major Features Added
+- **Backend Selection**: Users can now choose between krunvm and firecracker backends
+- **Config-Only Mode**: Vortex works without backend installed for configuration generation
+- **Graceful Degradation**: Clear error messages when backend operations are unavailable
+
+### 🔧 Fixes & Improvements
+- **Deadlock Fix**: Fixed SessionManager::reconcile_sessions deadlock when saving sessions
+- **Async I/O Fix**: Changed save_sessions to use std::fs::write to avoid async runtime issues
+- **Backend Provider**: Improved BackendProvider::new_empty() fallback for config-only operations
+- **Workspace Init**: Now works without backend for vortex.yaml generation
+
+### 📚 Documentation Updates
+- Comprehensive README with CLI reference section
+- Updated installation instructions with backend options
+- Added language detection table with more languages
+- Updated contributing guide with backend testing information
+- Added TODO.md update for Phase 5 completion
+
 ## [0.5.0] - 2026-02-11
 
 ### 🚀 Major Features Added

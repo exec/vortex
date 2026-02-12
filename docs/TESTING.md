@@ -6,17 +6,14 @@ This document describes the comprehensive test suite for Vortex, the lightning-f
 
 ```
 tests/
-├── integration/           # Integration tests
-│   ├── cli_integration_test.rs
-│   ├── workspace_integration_tests.rs
-│   └── workspace_comprehensive_test.rs
-├── performance/          # Performance benchmarks
-│   └── workspace_performance_test.rs
-├── e2e/                 # End-to-end scenarios
+├── cli_integration_test.rs     # CLI integration tests
+├── discovery_engine_tests.rs   # Discovery engine tests
+├── orchestrator_integration_tests.rs  # Orchestrator tests
+├── e2e/                       # End-to-end scenarios
 │   ├── test_workspace_demo.sh
 │   └── devcontainer_migration_test.sh
 └── docs/
-    └── TESTING.md       # This file
+    └── TESTING.md             # This file
 ```
 
 ## Running Tests
@@ -43,13 +40,15 @@ cargo test --bin vortex --release
 #### Integration Tests
 ```bash
 cargo test --test cli_integration_test --release
-cargo test test_workspace_creation_and_listing --release
-cargo test test_devcontainer_import --release
+cargo test --test cli_integration_test --release
+cargo test --test discovery_engine_tests --release
+cargo test --test discovery_engine_tests --release
+cargo test --test orchestrator_integration_tests --release
 ```
 
 #### Performance Tests
 ```bash
-cargo test --test workspace_performance_test --release -- --nocapture
+cargo test --test cli_integration_test --release -- --nocapture
 ```
 
 #### End-to-End Tests

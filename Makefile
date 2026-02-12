@@ -17,7 +17,7 @@ all: build
 
 # Build the project
 build:
-	@echo "🔨 Building Vortex v0.4.0..."
+	@echo "🔨 Building Vortex v0.5.0..."
 	cargo build $(CARGO_FLAGS)
 	@echo "✅ Build complete: $(TARGET_DIR)/$(BINARY_NAME)"
 

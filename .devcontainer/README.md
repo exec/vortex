@@ -77,7 +77,7 @@ gh workflow list
 gh run list
 
 # Create release
-gh release create v0.4.0
+gh release create v0.5.0
 ```
 
 ## Performance Comparison

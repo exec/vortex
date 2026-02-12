@@ -20,6 +20,7 @@ pub struct VmSpec {
     pub labels: HashMap<String, String>,
     pub network_config: Option<String>,
     pub resource_limits: ResourceLimits,
+    pub backend: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -90,16 +91,26 @@ pub trait VmEventHandler: Send + Sync {
 
 impl VmManager {
     pub async fn new() -> Result<Self> {
+        let backend_provider = match BackendProvider::new().await {
+            Ok(provider) => provider,
+            Err(e) => {
+                // If no backends are available, return an empty provider
+                // This allows VortexCore to be initialized for config-only operations
+                tracing::warn!("No VM backends available: {}. Config-only operations will still work.", e);
+                BackendProvider::new_empty()
+            }
+        };
+
         Ok(Self {
             instances: RwLock::new(HashMap::new()),
-            backend_provider: BackendProvider::new().await?,
+            backend_provider,
             event_handlers: RwLock::new(Vec::new()),
         })
     }
 
     pub async fn create(&self, spec: VmSpec) -> Result<VmInstance> {
         let vm_id = generate_vm_id();
-        let backend = self.backend_provider.get_backend().await?;
+        let backend = self.backend_provider.get_backend(spec.backend.as_deref()).await?;
 
         tracing::info!("Creating VM {} with spec: {:?}", vm_id, spec);
 
@@ -176,7 +187,12 @@ impl VmManager {
         }
 
         // If no in-memory instances, query the backend directly
-        let backend = self.backend_provider.get_backend().await?;
+        // If no backend is registered, return empty list
+        if !self.backend_provider.has_backends() {
+            return Ok(Vec::new());
+        }
+
+        let backend = self.backend_provider.get_backend(None).await?;
         let vm_names = backend.list_vms().await?;
 
         let mut vm_instances = Vec::new();
@@ -197,6 +213,7 @@ impl VmManager {
                         labels: HashMap::new(),
                         network_config: None,
                         resource_limits: ResourceLimits::default(),
+                        backend: None,
                     },
                     state: VmState::Running,
                     backend: Arc::clone(&backend),
@@ -221,7 +238,7 @@ impl VmManager {
             vm
         } else {
             // If not in memory, check if it exists in the backend
-            let backend = self.backend_provider.get_backend().await?;
+            let backend = self.backend_provider.get_backend(None).await?;
             let vm_names = backend.list_vms().await?;
 
             if vm_names.contains(&vm_id.to_string()) {
@@ -239,6 +256,7 @@ impl VmManager {
                         labels: HashMap::new(),
                         network_config: None,
                         resource_limits: ResourceLimits::default(),
+                        backend: None,
                     },
                     state: VmState::Running,
                     backend: Arc::clone(&backend),
@@ -282,7 +300,7 @@ impl VmManager {
             vm
         } else {
             // If not in memory, check if it exists in the backend
-            let backend = self.backend_provider.get_backend().await?;
+            let backend = self.backend_provider.get_backend(None).await?;
             let vm_names = backend.list_vms().await?;
 
             if vm_names.contains(&vm_id.to_string()) {
@@ -300,6 +318,7 @@ impl VmManager {
                         labels: HashMap::new(),
                         network_config: None,
                         resource_limits: ResourceLimits::default(),
+                        backend: None,
                     },
                     state: VmState::Running,
                     backend: Arc::clone(&backend),
@@ -328,7 +347,7 @@ impl VmManager {
             vm
         } else {
             // If not in memory, check if it exists in the backend
-            let backend = self.backend_provider.get_backend().await?;
+            let backend = self.backend_provider.get_backend(None).await?;
             let vm_names = backend.list_vms().await?;
 
             if vm_names.contains(&vm_id.to_string()) {
@@ -346,6 +365,7 @@ impl VmManager {
                         labels: HashMap::new(),
                         network_config: None,
                         resource_limits: ResourceLimits::default(),
+                        backend: None,
                     },
                     state: VmState::Running,
                     backend: Arc::clone(&backend),

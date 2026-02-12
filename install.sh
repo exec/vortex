@@ -21,7 +21,7 @@ print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Vortex version to install (latest)
-VERSION="v0.4.1"
+VERSION="v0.5.0"
 REPO="exec/vortex"
 
 print_status "🚀 Installing Vortex ${VERSION} - The Docker Killer"

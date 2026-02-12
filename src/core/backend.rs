@@ -84,7 +84,14 @@ impl BackendProvider {
         self.backends.insert(name.to_string(), backend);
     }
 
-    pub async fn get_backend(&self) -> Result<Arc<dyn Backend>> {
+    pub async fn get_backend(&self, preferred_backend: Option<&str>) -> Result<Arc<dyn Backend>> {
+        // First try the preferred backend if specified
+        if let Some(name) = preferred_backend {
+            if let Some(backend) = self.backends.get(name) {
+                return Ok(Arc::clone(backend));
+            }
+        }
+
         if let Some(preferred) = &self.preferred {
             if let Some(backend) = self.backends.get(preferred) {
                 return Ok(Arc::clone(backend));
@@ -96,8 +103,15 @@ impl BackendProvider {
         })
     }
 
-    pub fn list_backends(&self) -> Vec<&str> {
-        self.backends.keys().map(|s| s.as_str()).collect()
+    pub fn has_backends(&self) -> bool {
+        !self.backends.is_empty()
+    }
+
+    pub fn new_empty() -> Self {
+        BackendProvider {
+            backends: HashMap::new(),
+            preferred: None,
+        }
     }
 }
 
