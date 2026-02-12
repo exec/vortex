@@ -176,9 +176,6 @@ jobs:
     - name: Build release binary
       run: cargo build --release
     
-    - name: Make discovery and orchestrator scripts executable
-      run: chmod +x vortex_discovery vortex_orchestrator
-    
     - name: Run scenario-specific tests
       run: |
         case "${{ matrix.test-scenario }}" in
