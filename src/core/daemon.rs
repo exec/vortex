@@ -229,7 +229,7 @@ impl DaemonClient {
                 message: format!("Failed to read response: {}", e),
             })?;
 
-        serde_json::from_str(&response_line.trim()).map_err(|e| VortexError::VmError {
+        serde_json::from_str(response_line.trim()).map_err(|e| VortexError::VmError {
             message: format!("Failed to parse response: {}", e),
         })
     }

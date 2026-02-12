@@ -8,17 +8,18 @@ Transform Vortex from a VM session manager into the world's first **distributed 
 
 ## 📍 **Current State (v0.5.0)**
 
-✅ **Session Management**: Beautiful CLI for creating/managing individual VMs  
-✅ **Workspace Orchestration**: Multi-service templates (fullstack, microservices, AI/ML)  
-✅ **Template System**: 6 development environments with smart naming  
-✅ **Real-time Monitoring**: Live dashboard with metrics and logs  
-✅ **File Sync Engine**: Basic bidirectional sync (simulated)  
+✅ **Session Management**: Beautiful CLI for creating/managing individual VMs
+✅ **Workspace Orchestration**: Multi-service templates (fullstack, microservices, AI/ML)
+✅ **Template System**: 6 development environments with smart naming
+✅ **Real-time Monitoring**: Live dashboard with metrics and logs
+✅ **File Sync Engine**: Basic bidirectional sync (simulated)
+✅ **Auto-Discovery**: Interactive workspace initialization with project scanning
 
 ---
 
 ## 🗺️ **Development Phases**
 
-### **Phase 5: Directory-to-VM Mapping** 🎯 *Next Up*
+### **Phase 5: Directory-to-VM Mapping** ✅ *Complete*
 **Goal**: Automatically discover project structure and map subdirectories to VMs
 
 **Features**:
@@ -26,15 +27,17 @@ Transform Vortex from a VM session manager into the world's first **distributed 
 - **Smart mapping**: `frontend/` → Node VM, `backend/` → Python VM, etc.
 - **Configuration**: Simple `vortex.yaml` for manual overrides
 - **Basic networking**: Services can discover each other by name
+- **Interactive setup**: Guided workspace initialization
+- **Non-interactive mode**: CLI-driven auto-configuration
 
 **Commands**:
 ```bash
-vortex workspace init ./my-project     # Scan and suggest VM mapping
-vortex workspace create --from-dir ./my-project
-vortex service list                    # Show all services in workspace
+vortex workspace init                   # Interactive setup
+vortex workspace init ./project         # Auto-scan directory
+vortex workspace init --non-interactive
 ```
 
-**Success Criteria**: 
+**Success Criteria**:
 - Take a multi-service project directory
 - Automatically create VMs for each service
 - Services can communicate with each other

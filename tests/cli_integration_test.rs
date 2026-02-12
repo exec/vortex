@@ -3,7 +3,32 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn get_vortex_binary() -> PathBuf {
-    PathBuf::from("./target/release/vortex")
+    // Try release first, fall back to debug
+    let release_path = PathBuf::from("./target/release/vortex");
+    let debug_path = PathBuf::from("./target/debug/vortex");
+
+    if release_path.exists() {
+        release_path
+    } else if debug_path.exists() {
+        debug_path
+    } else {
+        // Build if needed
+        let output = Command::new("cargo")
+            .arg("build")
+            .output()
+            .expect("Failed to build vortex");
+
+        if !output.status.success() {
+            panic!("Build failed: {}", String::from_utf8_lossy(&output.stderr));
+        }
+
+        // Try again after build
+        if debug_path.exists() {
+            debug_path
+        } else {
+            release_path
+        }
+    }
 }
 
 fn run_vortex_expect_success(args: &[&str]) -> Result<String> {

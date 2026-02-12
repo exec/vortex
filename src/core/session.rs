@@ -36,7 +36,7 @@ pub enum SessionState {
 pub enum SessionCommand {
     // Session management
     CreateSession {
-        spec: VmSpec,
+        spec: Box<VmSpec>,
         name: Option<String>,
         persistent: bool,
     },
@@ -554,7 +554,7 @@ impl SessionManager {
                 spec,
                 name,
                 persistent,
-            } => match self.create_session(spec, name, persistent).await {
+            } => match self.create_session(*spec, name, persistent).await {
                 Ok(session) => Ok(SessionResponse::SessionCreated { session }),
                 Err(e) => Ok(SessionResponse::Error {
                     message: e.to_string(),

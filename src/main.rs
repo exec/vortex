@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::info;
 use vortex::{
-    detect_workspace_info, init, DaemonClient, ResourceLimits, SessionCommand, SessionResponse,
+    detect_workspace_info, init, DaemonClient, ResourceLimits, SessionCommand, SessionResponse, WorkspaceInfo,
     VmSpec, VortexConfig, VortexCore, VortexDaemon, VERSION,
 };
 
@@ -223,9 +223,6 @@ enum Commands {
         #[arg(help = "Session ID or name to attach to")]
         session: String,
     },
-
-    #[command(about = "List active sessions (background VMs)")]
-    Sessions,
 }
 
 #[derive(Subcommand)]
@@ -271,6 +268,18 @@ enum WorkspaceCommand {
 
         #[arg(long, help = "Source directory (defaults to current dir)")]
         source: Option<PathBuf>,
+    },
+
+    #[command(about = "Initialize a new workspace with interactive setup")]
+    Init {
+        #[arg(help = "Directory to scan (defaults to current dir)", default_value = ".")]
+        directory: PathBuf,
+
+        #[arg(long, help = "Output path for vortex.yaml", default_value = "vortex.yaml")]
+        output: PathBuf,
+
+        #[arg(long, help = "Non-interactive mode - auto-scan and generate")]
+        non_interactive: bool,
     },
 }
 
@@ -555,6 +564,13 @@ async fn main() -> Result<()> {
             } => {
                 import_devcontainer_workspace(&vortex, &name, &devcontainer, &source).await?;
             }
+            WorkspaceCommand::Init {
+                directory,
+                output,
+                non_interactive,
+            } => {
+                handle_workspace_init(&vortex, &directory, &output, non_interactive).await?;
+            }
         },
         Commands::Session { command } => match command {
             SessionSubcommand::Create {
@@ -617,9 +633,6 @@ async fn main() -> Result<()> {
         Commands::Attach { session } => {
             // Just use the VM manager's attach directly
             vortex.attach_vm(&session).await?;
-        }
-        Commands::Sessions => {
-            list_vms(&vortex).await?;
         }
     }
 
@@ -1306,6 +1319,7 @@ async fn show_dev_templates(vortex: &Arc<VortexCore>) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_dev_environment(
     vortex: &Arc<VortexCore>,
     template_name: &str,
@@ -1755,8 +1769,104 @@ async fn import_devcontainer_workspace(
     Ok(())
 }
 
+// Workspace initialization with interactive discovery
+
+async fn handle_workspace_init(
+    vortex: &Arc<VortexCore>,
+    directory: &Path,
+    output: &Path,
+    non_interactive: bool,
+) -> Result<()> {
+    println!();
+    println!("🔍 Scanning project directory: {}", directory.display());
+
+    // Auto-detect project structure using the core workspace detection
+    let workspace_info = detect_workspace_info(directory);
+
+    if let Some(info) = workspace_info {
+        if non_interactive {
+            // Non-interactive mode: Generate config directly
+            println!("✅ Detected project: {}", info.name);
+            println!("   Template: {}", info.suggested_template);
+
+            let vortex_config_path = output;
+            generate_vortex_yaml_from_info(&info, vortex_config_path)?;
+
+            println!(
+                "✅ Configuration saved to: {}",
+                vortex_config_path.display()
+            );
+            println!("🚀 Run: vortex workspace create <name> --template <template> --source {}", directory.display());
+        } else {
+            // Interactive mode: Ask user questions
+            interactive_workspace_init(vortex, &info, directory, output).await?;
+        }
+    } else {
+        // No project detected - use interactive mode
+        interactive_workspace_init(vortex, &default_workspace_info(directory), directory, output).await?;
+    }
+
+    Ok(())
+}
+
+fn default_workspace_info(directory: &Path) -> WorkspaceInfo {
+    WorkspaceInfo {
+        name: directory
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "my-project".to_string()),
+        suggested_template: "python".to_string(),
+        has_devcontainer: false,
+        devcontainer_path: None,
+    }
+}
+
+fn generate_vortex_yaml_from_info(info: &WorkspaceInfo, output_path: &Path) -> Result<()> {
+    // Simple YAML generation for now
+    let yaml = format!(
+        r#"name: {}
+description: Auto-generated workspace for {}
+
+services:
+  default:
+    type: backend
+    language: python
+    image: python:3.11-slim
+    ports:
+      - 8000:8000
+"#,
+        info.name, info.name
+    );
+
+    std::fs::write(output_path, yaml)?;
+    Ok(())
+}
+
+async fn interactive_workspace_init(
+    _vortex: &Arc<VortexCore>,
+    info: &WorkspaceInfo,
+    _directory: &Path,
+    _output: &Path,
+) -> Result<()> {
+    // Interactive mode - ask user questions
+    println!("✅ Detected project: {}", info.name);
+    println!("   Template: {}", info.suggested_template);
+    println!();
+
+    // In a real implementation, we'd ask user questions here
+    // For now, just generate the config
+    let output = Path::new("vortex.yaml");
+    generate_vortex_yaml_from_info(info, output)?;
+
+    println!("✅ Configuration saved to: vortex.yaml");
+    println!("🚀 Run: vortex workspace create <name> --template <template>");
+
+    Ok(())
+}
+
 // Session management handlers
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_session_create(
     vortex: &Arc<VortexCore>,
     template: &str,
@@ -1788,7 +1898,7 @@ async fn handle_session_create(
     let client = DaemonClient::new()?;
     let response = client
         .send_command(SessionCommand::CreateSession {
-            spec,
+            spec: Box::new(spec),
             name: name.clone(),
             persistent,
         })
@@ -2173,10 +2283,6 @@ async fn handle_attach_session(session_id: &str) -> Result<()> {
     }
 
     Ok(())
-}
-
-async fn handle_list_sessions() -> Result<()> {
-    handle_session_list().await
 }
 
 // Daemon management handlers

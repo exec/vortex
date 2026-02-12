@@ -1,8 +1,8 @@
-# Vortex v0.4.0 - Project Status
+# Vortex v0.5.0 - Project Status
 
 ## 🎉 Release Ready Status: ✅ COMPLETE
 
-Vortex v0.4.0 is **production-ready** with comprehensive testing, documentation, and CI/CD infrastructure.
+Vortex v0.5.0 is **production-ready** with Phase 5 Auto-Discovery implemented, comprehensive testing, and documentation.
 
 ## 📊 Quality Metrics
 

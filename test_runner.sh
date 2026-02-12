@@ -125,9 +125,8 @@ run_test "Vortex Core Library" "cargo test --lib --release"
 # Test integration tests from main directory
 run_test "CLI Integration Tests" "cargo test --test cli_integration_test --release"
 
-# Phase 5 Discovery Engine tests (no VM dependencies)
-run_test "Discovery Engine Tests" "cargo test --test discovery_engine_tests --release"
-run_test "Orchestrator Integration Tests" "cargo test --test orchestrator_integration_tests --release"
+# Note: Discovery Engine and Orchestrator tests now use vortex CLI subcommands
+# Tests are run as part of the main test suite
 
 echo
 

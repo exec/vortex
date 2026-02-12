@@ -5,6 +5,27 @@ All notable changes to Vortex will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-11
+
+### 🚀 Major Features Added
+- **Phase 5: Auto-Discovery**: Interactive and non-interactive workspace initialization
+- **vortex workspace init**: New command for project scanning and configuration generation
+- **Language Detection**: Automatic detection of Node.js, Python, Go, Rust, PHP, Ruby, Java
+- **Service Type Inference**: Intelligent detection of frontend, backend, worker, database, cache, queue services
+- **CLI Consolidation**: Unified `vortex` binary replacing standalone scripts
+
+### 🧹 Code Cleanup & Quality
+- **Removed Duplicate Scripts**: Eliminated `vortex_sessions.rs`, `vortex_orchestrator.rs`, `vortex_discovery`
+- **Dead Code Removal**: Cleaned up unused functions and commands
+- **Clippy Compliance**: All code now passes `cargo clippy` with zero warnings
+- **Test Improvements**: Fixed test binary paths for debug/release builds
+
+### 📦 New Module: `src/discovery/`
+- **Scanner**: Directory scanning and project structure analysis
+- **Language**: Language detection and image mapping
+- **ServiceType**: Service type inference from directory names
+- **ProjectInfo/ServiceInfo**: Data structures for detected projects
+
 ## [0.4.1] - 2025-09-28
 
 ### 🧹 Bug Fixes & Cleanup

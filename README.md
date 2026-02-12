@@ -18,35 +18,82 @@ A next-generation distributed development platform that automatically maps proje
 
 ## 🚀 Quick Start
 
-### Auto-Discovery Workflow (Phase 5 - Current)
+### Interactive Auto-Discovery (Phase 5 - Current)
 ```bash
-# Scan any project directory and auto-detect services
-./vortex_orchestrator workspace init ./my-complex-project
+# Start interactive workspace setup
+vortex workspace init
 
-# Creates vortex.yaml with detected services:
-# frontend/ → Node.js VM
-# backend/  → Python VM  
-# worker/   → Go VM
-# database/ → PostgreSQL VM
+# Answer a few questions about your project structure
+# The system will auto-detect languages, services, and generate a configuration
 
-# Deploy the entire distributed workspace
-./vortex_orchestrator workspace create --config vortex.yaml
-
-# Monitor everything in real-time
-./vortex_orchestrator monitor
+# For non-interactive use:
+vortex workspace init ./my-project --non-interactive
 ```
 
-### Manual Template Workflow  
+### Manual Workspace Creation
 ```bash
-# Create pre-built workspace templates
-./vortex_orchestrator workspace create fullstack-webapp myapp
-./vortex_orchestrator workspace create microservices-api enterprise  
-./vortex_orchestrator workspace create ai-ml-pipeline research
+# Create from pre-built templates
+vortex workspace create fullstack-webapp myapp
+vortex workspace create microservices-api enterprise
+vortex workspace create ai-ml-pipeline research
+```
 
-# Session management (like tmux for VMs)
-./vortex_quick sessions                    # List background VMs
-./vortex_quick attach my-session          # Connect to running VM
-./vortex_quick create python test         # Create new session
+### Session Management
+```bash
+vortex session list                       # List background VMs
+vortex session attach my-session          # Connect to running VM
+vortex session create python test         # Create new session
+```
+
+## 🏗️ Workspace Initialization
+
+Vortex's workspace initialization provides two modes for setting up your development environment:
+
+### Interactive Mode
+```bash
+vortex workspace init
+```
+
+This mode walks you through creating a workspace with guided questions:
+1. **Project name** - What should we call your project?
+2. **Service types** - Select from frontend, backend, worker, database, cache, queue
+3. **Languages** - Automatically detected from project files
+4. **Port configurations** - Set default ports for each service
+
+### Non-Interactive Mode
+```bash
+# Auto-scan current directory
+vortex workspace init --non-interactive
+
+# Auto-scan specific directory
+vortex workspace init ./my-complex-project --non-interactive
+
+# Custom output location
+vortex workspace init --non-interactive --output ./my-vortex.yaml
+```
+
+### Generated Configuration
+The system creates a `vortex.yaml` file like this:
+```yaml
+name: my-project
+description: Auto-generated workspace for my-project
+
+services:
+  frontend:
+    type: frontend
+    language: node
+    image: node:18-alpine
+    ports:
+      - 3000:3000
+    path: ./frontend
+
+  backend:
+    type: backend
+    language: python
+    image: python:3.11-slim
+    ports:
+      - 8000:8000
+    path: ./backend
 ```
 
 ## 🔍 Project Auto-Discovery
@@ -103,13 +150,12 @@ git clone https://github.com/exec/vortex.git
 cd vortex
 cargo build --release
 
-# Use the session manager directly
-./vortex_quick sessions
-./vortex_quick create python myproject
+# Use the session manager
+vortex session list
+vortex session create python myproject
 
-# Use the orchestrator for complex workspaces  
-./vortex_orchestrator workspace init ./my-project
-./vortex_orchestrator monitor
+# Initialize a new workspace with auto-discovery
+vortex workspace init
 ```
 
 ## 🔄 File Synchronization
@@ -118,30 +164,30 @@ Vortex provides real-time bidirectional file sync between your host and VMs:
 
 ```bash
 # Enable live file sync
-./vortex_orchestrator sync enable ./my-project
+vortex workspace sync enable ./my-project
 
 # Watch file changes in real-time
-./vortex_orchestrator sync watch
+vortex workspace sync watch
 
 # Check sync status
-./vortex_orchestrator sync status
+vortex workspace sync status
 ```
 
 ## 📊 Monitoring & Logs
 
 ```bash
 # Real-time dashboard with service health
-./vortex_orchestrator monitor
+vortex workspace monitor
 
 # Aggregated logs from all services
-./vortex_orchestrator logs
+vortex workspace logs
 
 # Service-specific logs
-./vortex_orchestrator logs frontend
+vortex workspace logs frontend
 
 # Cluster resource utilization
-./vortex_orchestrator cluster status
-./vortex_orchestrator cluster scale up
+vortex workspace cluster status
+vortex workspace cluster scale up
 ```
 
 ## 🎯 Architecture
@@ -167,7 +213,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed development plans.
 ### Auto-Discovering a Complex Project
 ```bash
 cd ~/my-ecommerce-platform
-./vortex_orchestrator workspace init .
+vortex workspace init .
 
 # Output:
 # 🔍 Discovered project structure:
@@ -183,7 +229,7 @@ cd ~/my-ecommerce-platform
 ### Managing Distributed Workspaces
 ```bash
 # Show all active workspaces
-./vortex_orchestrator workspace status
+vortex workspace status
 
 # Output:
 # 🔥 Found 3 active workspaces:
@@ -192,22 +238,22 @@ cd ~/my-ecommerce-platform
 # 3. 🔥 my-project (4 services)
 
 # Stop entire workspace
-./vortex_orchestrator workspace stop my-project
+vortex workspace stop my-project
 ```
 
 ### Individual Session Management
 ```bash
 # List all background sessions
-./vortex_quick sessions
+vortex session list
 
 # Create new development session
-./vortex_quick create python myproject
+vortex session create python myproject
 
 # Attach to running session
-./vortex_quick attach myproject
+vortex session attach myproject
 
 # Stop individual session
-./vortex_quick stop myproject
+vortex session stop myproject
 ```
 
 ## 🎯 Use Cases

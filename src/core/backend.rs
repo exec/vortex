@@ -132,7 +132,7 @@ impl Backend for KrunvmBackend {
         let image_name = &vm.spec.image;
 
         let mut cmd = Self::krunvm_command();
-        cmd.args(["create", &image_name]);
+        cmd.args(["create", image_name]);
         cmd.arg("--name").arg(&vm.id);
         cmd.arg("--mem").arg(vm.spec.memory.to_string());
         cmd.arg("--cpus").arg(vm.spec.cpus.to_string());
