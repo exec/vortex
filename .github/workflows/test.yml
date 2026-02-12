@@ -40,9 +40,6 @@ jobs:
     - name: Build release binary
       run: cargo build --release
     
-    - name: Make test scripts executable
-      run: chmod +x test_runner.sh tests/e2e/*.sh
-    
     - name: Run comprehensive test suite
       run: ./test_runner.sh
       env:
@@ -76,9 +73,6 @@ jobs:
     
     - name: Build release binary
       run: cargo build --release
-    
-    - name: Make test scripts executable
-      run: chmod +x test_runner.sh tests/e2e/*.sh
     
     - name: Run test suite (core tests only for speed)
       run: ./test_runner.sh
