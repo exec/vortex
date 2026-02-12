@@ -593,7 +593,8 @@ async fn main() -> Result<()> {
                 source,
                 backend,
             } => {
-                import_devcontainer_workspace(&vortex, &name, &devcontainer, &source, &backend).await?;
+                import_devcontainer_workspace(&vortex, &name, &devcontainer, &source, &backend)
+                    .await?;
             }
             WorkspaceCommand::Init {
                 directory,
@@ -1622,10 +1623,7 @@ async fn create_workspace(
         .create_workspace(name, template, Some(source_dir))?;
 
     // Store backend preference in workspace config
-    if let Some(mut config) = vortex
-        .workspace_manager
-        .get_workspace(&workspace.id)?
-    {
+    if let Some(mut config) = vortex.workspace_manager.get_workspace(&workspace.id)? {
         config.config.backend = Some(backend.to_string());
         vortex
             .workspace_manager
@@ -1892,7 +1890,11 @@ fn default_workspace_info(directory: &Path) -> WorkspaceInfo {
     }
 }
 
-fn generate_vortex_yaml_from_info(info: &WorkspaceInfo, output_path: &Path, backend: &str) -> Result<()> {
+fn generate_vortex_yaml_from_info(
+    info: &WorkspaceInfo,
+    output_path: &Path,
+    backend: &str,
+) -> Result<()> {
     // Simple YAML generation for now
     let yaml = format!(
         r#"name: {}

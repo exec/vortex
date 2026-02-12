@@ -96,7 +96,10 @@ impl VmManager {
             Err(e) => {
                 // If no backends are available, return an empty provider
                 // This allows VortexCore to be initialized for config-only operations
-                tracing::warn!("No VM backends available: {}. Config-only operations will still work.", e);
+                tracing::warn!(
+                    "No VM backends available: {}. Config-only operations will still work.",
+                    e
+                );
                 BackendProvider::new_empty()
             }
         };
@@ -110,7 +113,10 @@ impl VmManager {
 
     pub async fn create(&self, spec: VmSpec) -> Result<VmInstance> {
         let vm_id = generate_vm_id();
-        let backend = self.backend_provider.get_backend(spec.backend.as_deref()).await?;
+        let backend = self
+            .backend_provider
+            .get_backend(spec.backend.as_deref())
+            .await?;
 
         tracing::info!("Creating VM {} with spec: {:?}", vm_id, spec);
 
