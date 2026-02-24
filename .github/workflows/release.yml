@@ -115,7 +115,7 @@ jobs:
           mkdir -p package/bin package/systemd
           cp target/x86_64-unknown-linux-gnu/release/vortex package/bin/
           cp README.md LICENSE package/
-          cp ./systemd/vortex-daemon.service package/systemd/
+          cp ./systemd/vortexd.service package/systemd/
 
           # Create install script
           cat > package/install.sh << 'EOF'
@@ -194,7 +194,7 @@ jobs:
       - name: Copy systemd service file
         run: |
           mkdir -p package/systemd
-          cp ./systemd/vortex-daemon.service package/systemd/
+          cp ./systemd/vortexd.service package/systemd/
 
       - name: Create DEB package
         run: |
@@ -209,7 +209,7 @@ jobs:
           cp target/x86_64-unknown-linux-gnu/release/vortex deb-package/usr/bin/
           chmod +x deb-package/usr/bin/vortex
 
-          cp package/systemd/vortex-daemon.service deb-package/usr/share/vortex/
+          cp package/systemd/vortexd.service deb-package/usr/share/vortex/
           cp README.md LICENSE deb-package/usr/share/doc/vortex/
 
           cat > deb-package/DEBIAN/control << EOF
@@ -227,10 +227,10 @@ jobs:
           #!/bin/bash
           set -e
           echo "Installing Vortex systemd service..."
-          sudo cp /usr/share/vortex/vortex-daemon.service /etc/systemd/system/
+          sudo cp /usr/share/vortex/vortexd.service /etc/systemd/system/
           sudo systemctl daemon-reload
-          sudo systemctl enable vortex-daemon
-          sudo systemctl start vortex-daemon
+          sudo systemctl enable vortexd
+          sudo systemctl start vortexd
           exit 0
           EOF
           chmod +x deb-package/DEBIAN/postinst
@@ -239,9 +239,9 @@ jobs:
           #!/bin/bash
           set -e
           if [ "$1" = "remove" ]; then
-            sudo systemctl disable vortex-daemon 2>/dev/null || true
-            sudo systemctl stop vortex-daemon 2>/dev/null || true
-            sudo rm -f /etc/systemd/system/vortex-daemon.service
+            sudo systemctl disable vortexd 2>/dev/null || true
+            sudo systemctl stop vortexd 2>/dev/null || true
+            sudo rm -f /etc/systemd/system/vortexd.service
             sudo systemctl daemon-reload
           fi
           exit 0
@@ -299,7 +299,7 @@ jobs:
       - name: Copy systemd service file
         run: |
           mkdir -p package/systemd
-          cp ./systemd/vortex-daemon.service package/systemd/
+          cp ./systemd/vortexd.service package/systemd/
 
       - name: Create PKGARCH package
         run: |
@@ -313,7 +313,7 @@ jobs:
           cp target/x86_64-unknown-linux-gnu/release/vortex pkgarch-build/usr/bin/
           chmod +x pkgarch-build/usr/bin/vortex
 
-          cp package/systemd/vortex-daemon.service pkgarch-build/usr/share/vortex/
+          cp package/systemd/vortexd.service pkgarch-build/usr/share/vortex/
           cp README.md LICENSE pkgarch-build/usr/share/doc/vortex/
 
           cat > pkgarch-build/.PKGINFO << EOF
@@ -344,21 +344,21 @@ jobs:
             mkdir -p "$pkgdir/usr/bin"
             cp /usr/bin/vortex "$pkgdir/usr/bin/"
             mkdir -p "$pkgdir/usr/share/vortex"
-            cp /usr/share/vortex/vortex-daemon.service "$pkgdir/usr/share/vortex/"
+            cp /usr/share/vortex/vortexd.service "$pkgdir/usr/share/vortex/"
           }
           EOF
 
           cat > pkgarch-build/vortex.install << 'EOF'
           post_install() {
-            cp /usr/share/vortex/vortex-daemon.service /etc/systemd/system/
+            cp /usr/share/vortex/vortexd.service /etc/systemd/system/
             systemctl daemon-reload
-            systemctl enable vortex-daemon
-            systemctl start vortex-daemon
+            systemctl enable vortexd
+            systemctl start vortexd
           }
           post_remove() {
-            systemctl disable vortex-daemon 2>/dev/null || true
-            systemctl stop vortex-daemon 2>/dev/null || true
-            rm -f /etc/systemd/system/vortex-daemon.service
+            systemctl disable vortexd 2>/dev/null || true
+            systemctl stop vortexd 2>/dev/null || true
+            rm -f /etc/systemd/system/vortexd.service
             systemctl daemon-reload
           }
           post_upgrade() { post_install; }
@@ -379,11 +379,11 @@ jobs:
           curl -sL "$DOWNLOAD_URL" | tar -xzf - -C "$TEMP_DIR"
           sudo mkdir -p /usr/bin /usr/share/vortex /usr/share/doc/vortex
           sudo cp "$TEMP_DIR/usr/bin/vortex" /usr/bin/
-          sudo cp "$TEMP_DIR/usr/share/vortex/vortex-daemon.service" /usr/share/vortex/
-          sudo cp /usr/share/vortex/vortex-daemon.service /etc/systemd/system/
+          sudo cp "$TEMP_DIR/usr/share/vortex/vortexd.service" /usr/share/vortex/
+          sudo cp /usr/share/vortex/vortexd.service /etc/systemd/system/
           sudo systemctl daemon-reload
-          sudo systemctl enable vortex-daemon
-          sudo systemctl start vortex-daemon
+          sudo systemctl enable vortexd
+          sudo systemctl start vortexd
           rm -rf "$TEMP_DIR"
           echo "Vortex installed successfully!"
           EOF
@@ -424,7 +424,7 @@ jobs:
       - name: Copy systemd service file
         run: |
           mkdir -p package/systemd
-          cp ./systemd/vortex-daemon.service package/systemd/
+          cp ./systemd/vortexd.service package/systemd/
 
       - name: Build
         run: |
@@ -440,7 +440,7 @@ jobs:
 
           cp target/x86_64-unknown-linux-gnu/release/vortex rpm-build/SOURCES/vortex-$VERSION/usr/bin/
           chmod +x rpm-build/SOURCES/vortex-$VERSION/usr/bin/vortex
-          cp package/systemd/vortex-daemon.service rpm-build/SOURCES/vortex-$VERSION/usr/share/vortex/
+          cp package/systemd/vortexd.service rpm-build/SOURCES/vortex-$VERSION/usr/share/vortex/
           cp README.md LICENSE rpm-build/SOURCES/vortex-$VERSION/usr/share/doc/vortex/
 
           cd rpm-build/SOURCES
@@ -469,19 +469,19 @@ jobs:
           mkdir -p %{buildroot}/usr/share/vortex
           mkdir -p %{buildroot}/usr/share/doc/vortex
           cp usr/bin/vortex %{buildroot}/usr/bin/
-          cp usr/share/vortex/vortex-daemon.service %{buildroot}/usr/share/vortex/
+          cp usr/share/vortex/vortexd.service %{buildroot}/usr/share/vortex/
           cp usr/share/doc/vortex/* %{buildroot}/usr/share/doc/vortex/
 
           %files
           /usr/bin/vortex
-          /usr/share/vortex/vortex-daemon.service
+          /usr/share/vortex/vortexd.service
           /usr/share/doc/vortex/*
 
           %post
-          cp /usr/share/vortex/vortex-daemon.service /etc/systemd/system/
+          cp /usr/share/vortex/vortexd.service /etc/systemd/system/
           systemctl daemon-reload
-          systemctl enable vortex-daemon
-          systemctl start vortex-daemon
+          systemctl enable vortexd
+          systemctl start vortexd
           echo "Vortex installed successfully!"
 
           %changelog

@@ -124,12 +124,12 @@ case $PACKAGE in
         if [[ $OS == "linux" ]]; then
             print_status "Installing systemd service..."
             # Check if we're running from the source repo
-            if [[ -f "$TEMP_DIR/systemd/vortex-daemon.service" ]]; then
-                SERVICE_PATH="$TEMP_DIR/systemd/vortex-daemon.service"
+            if [[ -f "$TEMP_DIR/systemd/vortexd.service" ]]; then
+                SERVICE_PATH="$TEMP_DIR/systemd/vortexd.service"
                 print_status "Found systemd service file"
             else
                 # Try to find from installed location
-                SERVICE_PATH="/usr/local/bin/../share/vortex/vortex-daemon.service"
+                SERVICE_PATH="/usr/local/bin/../share/vortex/vortexd.service"
                 if [[ ! -f "$SERVICE_PATH" ]]; then
                     print_warning "Systemd service file not found - manual installation may be needed"
                     SERVICE_PATH=""
@@ -137,11 +137,11 @@ case $PACKAGE in
             fi
 
             if [[ -n "$SERVICE_PATH" ]]; then
-                print_status "Installing service to /etc/systemd/system/vortex-daemon.service"
-                sudo cp "$SERVICE_PATH" /etc/systemd/system/vortex-daemon.service
+                print_status "Installing service to /etc/systemd/system/vortexd.service"
+                sudo cp "$SERVICE_PATH" /etc/systemd/system/vortexd.service
                 sudo systemctl daemon-reload
-                sudo systemctl enable vortex-daemon
-                sudo systemctl start vortex-daemon
+                sudo systemctl enable vortexd
+                sudo systemctl start vortexd
                 print_success "Systemd service installed and started!"
             fi
         fi

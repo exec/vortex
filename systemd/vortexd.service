@@ -3,10 +3,10 @@
 #
 # Installation (via install.sh or manual):
 #   ./install.sh                         # Auto-installs on Linux
-#   sudo cp vortex-daemon.service /etc/systemd/system/
+#   sudo cp vortexd.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable vortex-daemon
-#   sudo systemctl start vortex-daemon
+#   sudo systemctl enable vortexd
+#   sudo systemctl start vortexd
 
 [Unit]
 Description=Vortex Ephemeral VM Daemon
@@ -40,7 +40,7 @@ ReadWritePaths=%h/.config/vortex
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=vortex-daemon
+SyslogIdentifier=vortexd
 
 [Install]
 WantedBy=multi-user.target
