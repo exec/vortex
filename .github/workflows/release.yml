@@ -262,7 +262,7 @@ jobs:
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
           # Upload the asset
-          gh release upload "$TAG_NAME" ./vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz
+          gh release upload "$TAG_NAME" ./vortex-$TAG_NAME-linux-amd64.tar.gz
 
   build-deb:
     runs-on: ubuntu-latest
@@ -374,7 +374,7 @@ jobs:
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
           VERSION=${{ steps.get_version.outputs.version }}
-          gh release upload "$TAG_NAME" ./vortex_${VERSION}_amd64.deb
+          gh release upload "$TAG_NAME" ./vortex_${VERSION}_amd64.deb --clobber
 
   build-arch:
     runs-on: ubuntu-latest
@@ -481,7 +481,7 @@ jobs:
           chmod +x pkgarch-build/vortex.install
 
           cd pkgarch-build
-          tar -czf ../vortex-$VERSION-x86_64-unknown-linux-gnu.pkg.tar.gz .
+          tar -czf ../vortex-$VERSION-linux-amd64.pkg.tar.gz .
           cd ..
 
           cat > vortex-arch-install.sh << 'EOF'
@@ -489,7 +489,7 @@ jobs:
           set -e
           echo "Installing Vortex..."
           VERSION="${1:-v0.5.0}"
-          DOWNLOAD_URL="https://github.com/exec/vortex/releases/download/$VERSION/vortex-$VERSION-x86_64-unknown-linux-gnu.pkg.tar.gz"
+          DOWNLOAD_URL="https://github.com/exec/vortex/releases/download/$VERSION/vortex-$VERSION-linux-amd64.pkg.tar.gz"
           TEMP_DIR=$(mktemp -d)
           curl -sL "$DOWNLOAD_URL" | tar -xzf - -C "$TEMP_DIR"
           sudo mkdir -p /usr/bin /usr/share/vortex /usr/share/doc/vortex
@@ -520,8 +520,8 @@ jobs:
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
           VERSION=${TAG_NAME#v}
-          gh release upload "$TAG_NAME" ./vortex-$VERSION-x86_64-unknown-linux-gnu.pkg.tar.gz
-          gh release upload "$TAG_NAME" ./vortex-arch-install.sh
+          gh release upload "$TAG_NAME" ./vortex-$VERSION-linux-amd64.pkg.tar.gz --clobber
+          gh release upload "$TAG_NAME" ./vortex-arch-install.sh --clobber
 
   build-rpm:
     runs-on: ubuntu-latest
@@ -629,7 +629,7 @@ jobs:
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
           VERSION=${TAG_NAME#v}
-          gh release upload "$TAG_NAME" ./vortex-$VERSION-1.x86_64.rpm
+          gh release upload "$TAG_NAME" ./vortex-$VERSION-1.x86_64.rpm --clobber
 
   create-install-script:
     runs-on: ubuntu-latest
