@@ -50,17 +50,21 @@ jobs:
           fi
 
           echo "Getting release for tag: $TAG_NAME"
-          
+
           # Get existing release info
           RELEASE_INFO=$(gh api repos/${{ github.repository }}/releases/tags/$TAG_NAME 2>/dev/null || echo "")
-          
+
           if [ -n "$RELEASE_INFO" ]; then
             echo "Found existing release"
             UPLOAD_URL=$(echo "$RELEASE_INFO" | jq -r '.upload_url')
             RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.id')
           else
-            echo "No existing release found, this should not happen"
-            exit 1
+            echo "No existing release found, creating one..."
+            # Create a new release
+            NEW_RELEASE=$(gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false)
+            RELEASE_ID=$(echo "$NEW_RELEASE" | jq -r '.id')
+            UPLOAD_URL=$(echo "$NEW_RELEASE" | jq -r '.upload_url')
+            echo "Created release with ID: $RELEASE_ID"
           fi
 
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
@@ -325,6 +329,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           gh release upload $TAG_NAME ./vortex_${{ steps.get_version.outputs.version }}_amd64.deb
 
   build-arch:
@@ -510,6 +515,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           VERSION=${TAG_NAME#v}
           gh release upload $TAG_NAME ./vortex-$VERSION-x86_64-unknown-linux-gnu.pkg.tar.gz
           gh release upload $TAG_NAME ./vortex-arch-install.sh
