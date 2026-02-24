@@ -42,6 +42,7 @@ jobs:
               # Get the latest git tag as fallback
               TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
             fi
+          fi
 
           if [ -z "$TAG_NAME" ]; then
             echo "Error: No tag provided. For manual runs, provide a tag via the GitHub UI."
@@ -59,7 +60,8 @@ jobs:
           else
             echo "No existing release found, this should not happen"
             exit 1
-          
+          fi
+
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
           echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
 
