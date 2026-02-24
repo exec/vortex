@@ -105,7 +105,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="${{ steps.version_vars.outputs.tag_name }}"
-          VERSION="${{ steps.version_vars.outputs.version }}"
           ARCHIVE_NAME="${{ steps.version_vars.outputs.archive_name }}"
 
           # Create release if it doesn't exist
@@ -383,7 +382,7 @@ jobs:
           # Create release if it doesn't exist
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
-          gh release upload "$TAG_NAME" ./vortex-${VERSION}_amd64.deb --clobber
+          gh release upload "$TAG_NAME" ./vortex_${VERSION}_amd64.deb --clobber
 
   build-arch:
     runs-on: ubuntu-latest
