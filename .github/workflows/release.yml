@@ -42,12 +42,10 @@ jobs:
               # Get the latest git tag as fallback
               TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
             fi
-          fi
 
           if [ -z "$TAG_NAME" ]; then
             echo "Error: No tag provided. For manual runs, provide a tag via the GitHub UI."
             exit 1
-          fi
           
           echo "Getting release for tag: $TAG_NAME"
           
@@ -61,7 +59,6 @@ jobs:
           else
             echo "No existing release found, this should not happen"
             exit 1
-          fi
           
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_OUTPUT
           echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
@@ -78,16 +75,16 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-unknown-linux-gnu
       
       - name: Build
         run: |
-          cargo build --release --target ${{ matrix.target }}
+          cargo build --release --target x86_64-unknown-linux-gnu
           
       - name: Create package
         run: |
           mkdir -p package/bin
-          cp target/${{ matrix.target }}/release/vortex package/bin/
+          cp target/x86_64-unknown-linux-gnu/release/vortex package/bin/
           cp README.md LICENSE package/
           
           # Create install script
@@ -100,7 +97,6 @@ jobs:
           # Check for krunvm dependency
           if ! command -v krunvm &> /dev/null; then
               echo "Warning: krunvm not found. Install with: brew install krunvm"
-          fi
           
           # Install binary
           sudo mkdir -p /usr/local/bin
@@ -120,8 +116,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
-          tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
+          tar -czf ../vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz *
 
       - name: Upload Release Asset
         env:
@@ -132,15 +127,12 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
-          gh release upload $TAG_NAME ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
+          gh release upload $TAG_NAME ./vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz
 
   build-linux:
     needs: get-release
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+    # Simplified to x86_64 only to avoid aarch64 cross-compilation timeout
     steps:
       - uses: actions/checkout@v4
       
@@ -148,26 +140,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
           
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-unknown-linux-gnu
       
       - name: Build
         run: |
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-          fi
-          cargo build --release --target ${{ matrix.target }}
+          cargo build --release --target x86_64-unknown-linux-gnu
           
       - name: Create generic Linux package
         run: |
           mkdir -p package/bin package/systemd
-          cp target/${{ matrix.target }}/release/vortex package/bin/
+          cp target/x86_64-unknown-linux-gnu/release/vortex package/bin/
           cp README.md LICENSE package/
           cp ../systemd/vortex-daemon.service package/systemd/
 
@@ -197,8 +183,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
-          tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
+          tar -czf ../vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz *
 
       - name: Upload Generic Linux Asset
         env:
@@ -209,15 +194,11 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
-          gh release upload $TAG_NAME ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
+          gh release upload $TAG_NAME ./vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz
 
   build-deb:
     needs: get-release
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
 
@@ -229,7 +210,6 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
           VERSION=${VERSION#v}  # Remove 'v' prefix
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -237,22 +217,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+          targets: x86_64-unknown-linux-gnu
 
       - name: Build
         run: |
-          TARGET=${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-          fi
-          cargo build --release --target $TARGET
+          cargo build --release --target x86_64-unknown-linux-gnu
 
       - name: Copy systemd service file
         run: |
@@ -261,7 +234,6 @@ jobs:
 
       - name: Create DEB package ( installs to /usr/bin )
         run: |
-          TARGET=${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}  # Remove 'v' prefix
 
@@ -271,7 +243,7 @@ jobs:
           mkdir -p deb-package/usr/share/doc/vortex
 
           # Copy binary to /usr/bin
-          cp target/$TARGET/release/vortex deb-package/usr/bin/
+          cp target/x86_64-unknown-linux-gnu/release/vortex deb-package/usr/bin/
           chmod +x deb-package/usr/bin/vortex
 
           # Copy systemd service file from package directory
@@ -286,7 +258,7 @@ jobs:
           Version: $VERSION
           Section: utils
           Priority: optional
-          Architecture: ${{ matrix.arch }}
+          Architecture: amd64
           Maintainer: Vortex Contributors <noreply@github.com>
           Description: Lightning-fast ephemeral VM platform
            Vortex is a powerful Rust CLI for creating and managing ephemeral
@@ -329,14 +301,13 @@ jobs:
               sudo systemctl stop vortex-daemon 2>/dev/null || true
               sudo rm -f /etc/systemd/system/vortex-daemon.service
               sudo systemctl daemon-reload
-          fi
 
           exit 0
           EOF
           chmod +x deb-package/DEBIAN/postrm
 
           # Build package
-          dpkg-deb --build deb-package vortex_${VERSION}_${{ matrix.arch }}.deb
+          dpkg-deb --build deb-package vortex_${VERSION}_amd64.deb
 
       - name: Upload DEB Asset
         env:
@@ -347,15 +318,11 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
-          gh release upload $TAG_NAME ./vortex_${{ steps.get_version.outputs.version }}_${{ matrix.arch }}.deb
+          gh release upload $TAG_NAME ./vortex_${{ steps.get_version.outputs.version }}_amd64.deb
 
   build-arch:
     needs: get-release
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
 
@@ -367,7 +334,6 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
           VERSION=${VERSION#v}  # Remove 'v' prefix
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -375,31 +341,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Build
+        run: |
+          cargo build --release --target x86_64-unknown-linux-gnu
 
       - name: Copy systemd service file
         run: |
           mkdir -p package/systemd
           cp ../systemd/vortex-daemon.service package/systemd/
 
-      - name: Build
-        run: |
-          TARGET=${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-          fi
-          cargo build --release --target $TARGET
-
       - name: Create PKGARCH package ( installs to /usr/bin )
         run: |
-          TARGET=${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}  # Remove 'v' prefix
 
@@ -408,7 +366,7 @@ jobs:
           mkdir -p pkgarch-build/usr/share/doc/vortex
 
           # Copy binary to /usr/bin
-          cp target/$TARGET/release/vortex pkgarch-build/usr/bin/
+          cp target/x86_64-unknown-linux-gnu/release/vortex pkgarch-build/usr/bin/
           chmod +x pkgarch-build/usr/bin/vortex
 
           # Copy systemd service file from package directory
@@ -427,7 +385,7 @@ jobs:
           builddate = $(date +%s)
           packager = Vortex Contributors <noreply@github.com>
           size = $(du -sb pkgarch-build | cut -f1)
-          arch = ${{ matrix.arch }}
+          arch = x86_64
           license = MIT
           backup =
           optdepends =
@@ -493,7 +451,7 @@ jobs:
           # Build package using drpm (if available) or create tarball
           # For GitHub releases, we'll use a tarball with install script
           cd pkgarch-build
-          tar -czf ../vortex-$VERSION-$TARGET.pkg.tar.gz .
+          tar -czf ../vortex-$VERSION-x86_64-unknown-linux-gnu.pkg.tar.gz .
           cd ..
 
           # Create a simple install script
@@ -503,17 +461,9 @@ jobs:
 
           echo "Installing Vortex..."
 
-          # Detect architecture
-          ARCH=$(uname -m)
-          case $ARCH in
-              x86_64) TARGET="x86_64-unknown-linux-gnu" ;;
-              aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
-              *) echo "Unsupported architecture: $ARCH" && exit 1 ;;
-          esac
-
           # Download package
           VERSION="${1:-v0.5.0}"
-          DOWNLOAD_URL="https://github.com/exec/vortex/releases/download/$VERSION/vortex-$VERSION-$TARGET.pkg.tar.gz"
+          DOWNLOAD_URL="https://github.com/exec/vortex/releases/download/$VERSION/vortex-$VERSION-x86_64-unknown-linux-gnu.pkg.tar.gz"
 
           TEMP_DIR=$(mktemp -d)
           echo "Downloading $DOWNLOAD_URL..."
@@ -552,33 +502,25 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
           VERSION=${TAG_NAME#v}
-          TARGET=${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
-          gh release upload $TAG_NAME ./vortex-$VERSION-$TARGET.pkg.tar.gz
+          gh release upload $TAG_NAME ./vortex-$VERSION-x86_64-unknown-linux-gnu.pkg.tar.gz
           gh release upload $TAG_NAME ./vortex-arch-install.sh
 
   build-rpm:
     needs: get-release
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential rpm
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
-          
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.arch }}-unknown-linux-gnu
+          targets: x86_64-unknown-linux-gnu
 
       - name: Copy systemd service file
         run: |
@@ -587,10 +529,7 @@ jobs:
 
       - name: Build
         run: |
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-          fi
-          cargo build --release --target ${{ matrix.arch }}-unknown-linux-gnu
+          cargo build --release --target x86_64-unknown-linux-gnu
 
       - name: Create RPM package ( installs to /usr/bin )
         run: |
@@ -602,7 +541,7 @@ jobs:
           mkdir -p rpm-build/SOURCES/vortex-$VERSION/{usr/bin,usr/share/vortex,usr/share/doc/vortex}
 
           # Copy files
-          cp target/${{ matrix.arch }}-unknown-linux-gnu/release/vortex rpm-build/SOURCES/vortex-$VERSION/usr/bin/
+          cp target/x86_64-unknown-linux-gnu/release/vortex rpm-build/SOURCES/vortex-$VERSION/usr/bin/
           chmod +x rpm-build/SOURCES/vortex-$VERSION/usr/bin/vortex
           cp package/systemd/vortex-daemon.service rpm-build/SOURCES/vortex-$VERSION/usr/share/vortex/
           cp README.md LICENSE rpm-build/SOURCES/vortex-$VERSION/usr/share/doc/vortex/
@@ -621,7 +560,7 @@ jobs:
           License:        MIT
           URL:            https://github.com/exec/vortex
           Source0:        %{name}-%{version}.tar.gz
-          BuildArch:      ${{ matrix.arch }}
+          BuildArch:      x86_64
           
           %description
           Vortex is a powerful Rust CLI for creating and managing ephemeral
@@ -667,7 +606,7 @@ jobs:
           rpmbuild --define "_topdir $(pwd)/rpm-build" -bb rpm-build/SPECS/vortex.spec
           
           # Find the built RPM
-          find rpm-build/RPMS -name "*.rpm" -exec cp {} ./vortex-$VERSION-1.${{ matrix.arch }}.rpm \;
+          find rpm-build/RPMS -name "*.rpm" -exec cp {} ./vortex-$VERSION-1.x86_64.rpm \;
           
       - name: Upload RPM Asset
         env:
@@ -678,9 +617,8 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
           VERSION=${TAG_NAME#v}  # Remove 'v' prefix
-          gh release upload $TAG_NAME ./vortex-$VERSION-1.${{ matrix.arch }}.rpm
+          gh release upload $TAG_NAME ./vortex-$VERSION-1.x86_64.rpm
 
   create-install-script:
     needs: get-release
@@ -719,7 +657,6 @@ jobs:
           if [ -z "$LATEST_RELEASE" ]; then
               echo "Failed to get latest release information"
               exit 1
-          fi
           
           echo "Installing Vortex $LATEST_RELEASE for $OS/$ARCH"
           
@@ -735,7 +672,6 @@ jobs:
           else
               echo "Error: curl or wget is required"
               exit 1
-          fi
           
           # Install
           echo "Installing to /usr/local/bin..."
@@ -753,7 +689,6 @@ jobs:
               echo "💡 Install krunvm with: brew install krunvm"
           else
               echo "💡 You may need to install krunvm or Firecracker separately"
-          fi
           echo
           echo "🚀 Run 'vortex --help' to get started"
           echo "📖 Documentation: https://github.com/exec/vortex#readme"
@@ -770,5 +705,4 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
-          fi
           gh release upload $TAG_NAME ./install.sh --clobber
