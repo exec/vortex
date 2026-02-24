@@ -254,6 +254,11 @@ jobs:
           fi
           cargo build --release --target $TARGET
 
+      - name: Copy systemd service file
+        run: |
+          mkdir -p package/systemd
+          cp ../systemd/vortex-daemon.service package/systemd/
+
       - name: Create DEB package ( installs to /usr/bin )
         run: |
           TARGET=${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
@@ -269,8 +274,8 @@ jobs:
           cp target/$TARGET/release/vortex deb-package/usr/bin/
           chmod +x deb-package/usr/bin/vortex
 
-          # Copy systemd service file
-          cp ../systemd/vortex-daemon.service deb-package/usr/share/vortex/
+          # Copy systemd service file from package directory
+          cp package/systemd/vortex-daemon.service deb-package/usr/share/vortex/
 
           # Copy documentation
           cp README.md LICENSE deb-package/usr/share/doc/vortex/
@@ -379,6 +384,11 @@ jobs:
         with:
           targets: ${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
 
+      - name: Copy systemd service file
+        run: |
+          mkdir -p package/systemd
+          cp ../systemd/vortex-daemon.service package/systemd/
+
       - name: Build
         run: |
           TARGET=${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
@@ -401,8 +411,8 @@ jobs:
           cp target/$TARGET/release/vortex pkgarch-build/usr/bin/
           chmod +x pkgarch-build/usr/bin/vortex
 
-          # Copy systemd service file
-          cp ../systemd/vortex-daemon.service pkgarch-build/usr/share/vortex/
+          # Copy systemd service file from package directory
+          cp package/systemd/vortex-daemon.service pkgarch-build/usr/share/vortex/
 
           # Copy documentation
           cp README.md LICENSE pkgarch-build/usr/share/doc/vortex/
@@ -569,33 +579,39 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.arch }}-unknown-linux-gnu
-      
+
+      - name: Copy systemd service file
+        run: |
+          mkdir -p package/systemd
+          cp ../systemd/vortex-daemon.service package/systemd/
+
       - name: Build
         run: |
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
           fi
           cargo build --release --target ${{ matrix.arch }}-unknown-linux-gnu
-          
-      - name: Create RPM package
+
+      - name: Create RPM package ( installs to /usr/bin )
         run: |
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}  # Remove 'v' prefix
-          
+
           # Create directory structure
           mkdir -p rpm-build/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-          mkdir -p rpm-build/SOURCES/vortex-$VERSION/{usr/local/bin,usr/share/doc/vortex}
-          
+          mkdir -p rpm-build/SOURCES/vortex-$VERSION/{usr/bin,usr/share/vortex,usr/share/doc/vortex}
+
           # Copy files
-          cp target/${{ matrix.arch }}-unknown-linux-gnu/release/vortex rpm-build/SOURCES/vortex-$VERSION/usr/local/bin/
-          chmod +x rpm-build/SOURCES/vortex-$VERSION/usr/local/bin/vortex
+          cp target/${{ matrix.arch }}-unknown-linux-gnu/release/vortex rpm-build/SOURCES/vortex-$VERSION/usr/bin/
+          chmod +x rpm-build/SOURCES/vortex-$VERSION/usr/bin/vortex
+          cp package/systemd/vortex-daemon.service rpm-build/SOURCES/vortex-$VERSION/usr/share/vortex/
           cp README.md LICENSE rpm-build/SOURCES/vortex-$VERSION/usr/share/doc/vortex/
-          
+
           # Create tarball
           cd rpm-build/SOURCES
           tar -czf vortex-$VERSION.tar.gz vortex-$VERSION/
           cd ../..
-          
+
           # Create spec file
           cat > rpm-build/SPECS/vortex.spec << EOF
           Name:           vortex
@@ -620,18 +636,26 @@ jobs:
           %setup -q
           
           %install
-          mkdir -p %{buildroot}/usr/local/bin
+          mkdir -p %{buildroot}/usr/bin
+          mkdir -p %{buildroot}/usr/share/vortex
           mkdir -p %{buildroot}/usr/share/doc/vortex
-          cp usr/local/bin/vortex %{buildroot}/usr/local/bin/
+          cp usr/bin/vortex %{buildroot}/usr/bin/
+          cp usr/share/vortex/vortex-daemon.service %{buildroot}/usr/share/vortex/
           cp usr/share/doc/vortex/* %{buildroot}/usr/share/doc/vortex/
-          
+
           %files
-          /usr/local/bin/vortex
+          /usr/bin/vortex
+          /usr/share/vortex/vortex-daemon.service
           /usr/share/doc/vortex/*
-          
+
           %post
+          echo "Installing Vortex systemd service..."
+          cp /usr/share/vortex/vortex-daemon.service /etc/systemd/system/
+          systemctl daemon-reload
+          systemctl enable vortex-daemon
+          systemctl start vortex-daemon
           echo "Vortex installed successfully!"
-          echo "Note: You may need to install krunvm or Firecracker separately."
+          echo "Systemd service installed and started automatically."
           echo "Run 'vortex --help' to get started."
           
           %changelog
