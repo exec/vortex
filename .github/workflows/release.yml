@@ -109,11 +109,11 @@ jobs:
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
           # Upload the asset
+          ls -la vortex-$TAG_NAME-${TARGET_NAME}.tar.gz 2>/dev/null || echo "File not found"
           gh release upload "$TAG_NAME" ./vortex-$TAG_NAME-${TARGET_NAME}.tar.gz
 
   build-macos-pkg:
     runs-on: macos-latest
-    needs: build-macos
     steps:
       - uses: actions/checkout@v4
         with:
