@@ -34,6 +34,9 @@ else
     fi
 fi
 
+# Strip 'v' prefix for file naming
+VERSION_NUM=${VERSION#v}
+
 print_status "🚀 Installing Vortex ${VERSION} - The Docker Killer"
 echo
 
@@ -63,12 +66,12 @@ case $OS in
         # Use simplified naming from GitHub Actions artifacts
         if [[ $ARCH == "amd64" ]]; then
             if [[ $ARCH_PACKAGE_TYPE == "arch" ]]; then
-                PACKAGE="vortex-${VERSION}-x86_64-unknown-linux-gnu.pkg.tar.gz"
+                PACKAGE="vortex-${VERSION_NUM}-x86_64-unknown-linux-gnu.pkg.tar.gz"
             elif [[ $ARCH_PACKAGE_TYPE == "rpm" ]]; then
-                # RPM packages are built as vortex-VERSION-1.x86_64.rpm
-                PACKAGE="vortex-${VERSION}-1.x86_64.rpm"
+                # RPM packages are built as vortex-VERSION_NUM-1.x86_64.rpm
+                PACKAGE="vortex-${VERSION_NUM}-1.x86_64.rpm"
             else
-                PACKAGE="vortex-${VERSION}-linux-amd64.tar.gz"
+                PACKAGE="vortex-${VERSION_NUM}-linux-amd64.tar.gz"
             fi
         elif [[ $ARCH == "arm64" ]]; then
             if [[ $ARCH_PACKAGE_TYPE == "arch" ]]; then
@@ -78,7 +81,7 @@ case $OS in
                 print_error "RPM ARM64 packages not yet available"
                 exit 1
             else
-                PACKAGE="vortex-${VERSION}-linux-arm64.tar.gz"
+                PACKAGE="vortex-${VERSION_NUM}-linux-arm64.tar.gz"
             fi
         else
             print_error "Unsupported Linux architecture: $ARCH (only amd64 and arm64 supported)"
@@ -90,9 +93,9 @@ case $OS in
         print_status "Detected macOS system"
         # Use simplified naming from GitHub Actions artifacts
         if [[ $ARCH == "arm64" ]]; then
-            PACKAGE="vortex-${VERSION}-macos-arm64.tar.gz"
+            PACKAGE="vortex-${VERSION_NUM}-macos-arm64.tar.gz"
         elif [[ $ARCH == "amd64" ]]; then
-            PACKAGE="vortex-${VERSION}-macos-amd64.tar.gz"
+            PACKAGE="vortex-${VERSION_NUM}-macos-amd64.tar.gz"
         else
             print_error "Unsupported macOS architecture: $ARCH"
             exit 1
