@@ -69,6 +69,8 @@ jobs:
 
       - name: Set version variables
         id: version_vars
+        env:
+          MATRIX_TARGET: ${{ matrix.target }}
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
@@ -79,12 +81,12 @@ jobs:
           fi
 
           # Map target to simplified naming for install.sh compatibility
-          if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
+          if [[ "$MATRIX_TARGET" == "x86_64-apple-darwin" ]]; then
             TARGET_NAME="macos-amd64"
-          elif [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
+          elif [[ "$MATRIX_TARGET" == "aarch64-apple-darwin" ]]; then
             TARGET_NAME="macos-arm64"
           else
-            TARGET_NAME="${{ matrix.target }}"
+            TARGET_NAME="$MATRIX_TARGET"
           fi
 
           echo "TAG_NAME=$TAG_NAME"
@@ -108,9 +110,9 @@ jobs:
           # Create release if it doesn't exist
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
-          # Upload the asset
+          # Upload the asset (with clobber to overwrite if exists)
           ls -la "$ARCHIVE_NAME" 2>/dev/null || echo "File not found"
-          gh release upload "$TAG_NAME" ./"$ARCHIVE_NAME"
+          gh release upload "$TAG_NAME" ./"$ARCHIVE_NAME" --clobber
 
   build-macos-pkg:
     runs-on: macos-latest
@@ -194,7 +196,7 @@ jobs:
           # Create release if it doesn't exist
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
-          gh release upload "$TAG_NAME" ./vortex-$VERSION.pkg
+          gh release upload "$TAG_NAME" ./vortex-$VERSION.pkg --clobber
 
   build-linux:
     runs-on: ubuntu-latest
@@ -272,7 +274,7 @@ jobs:
 
           # Upload the asset
           ls -la "$ARCHIVE_NAME" 2>/dev/null || echo "File not found"
-          gh release upload "$TAG_NAME" ./"$ARCHIVE_NAME"
+          gh release upload "$TAG_NAME" ./"$ARCHIVE_NAME" --clobber
 
   build-deb:
     runs-on: ubuntu-latest
