@@ -89,6 +89,8 @@ jobs:
             TARGET_NAME="${{ matrix.target }}"
           fi
 
+          echo "TAG_NAME=$TAG_NAME"
+          echo "TARGET_NAME=$TARGET_NAME"
           tar -czf ../vortex-$TAG_NAME-${TARGET_NAME}.tar.gz *
 
       - name: Release and Upload
