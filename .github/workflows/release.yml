@@ -158,7 +158,7 @@ jobs:
           mkdir -p package/bin package/systemd
           cp target/x86_64-unknown-linux-gnu/release/vortex package/bin/
           cp README.md LICENSE package/
-          cp ../systemd/vortex-daemon.service package/systemd/
+          cp ./systemd/vortex-daemon.service package/systemd/
 
           # Create install script
           cat > package/install.sh << 'EOF'
@@ -233,7 +233,7 @@ jobs:
       - name: Copy systemd service file
         run: |
           mkdir -p package/systemd
-          cp ../systemd/vortex-daemon.service package/systemd/
+          cp ./systemd/vortex-daemon.service package/systemd/
 
       - name: Create DEB package ( installs to /usr/bin )
         run: |
@@ -357,7 +357,7 @@ jobs:
       - name: Copy systemd service file
         run: |
           mkdir -p package/systemd
-          cp ../systemd/vortex-daemon.service package/systemd/
+          cp ./systemd/vortex-daemon.service package/systemd/
 
       - name: Create PKGARCH package ( installs to /usr/bin )
         run: |
@@ -528,7 +528,7 @@ jobs:
       - name: Copy systemd service file
         run: |
           mkdir -p package/systemd
-          cp ../systemd/vortex-daemon.service package/systemd/
+          cp ./systemd/vortex-daemon.service package/systemd/
 
       - name: Build
         run: |
@@ -620,6 +620,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           VERSION=${TAG_NAME#v}  # Remove 'v' prefix
           gh release upload $TAG_NAME ./vortex-$VERSION-1.x86_64.rpm
 
@@ -708,4 +709,5 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           gh release upload $TAG_NAME ./install.sh --clobber
