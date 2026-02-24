@@ -21,9 +21,18 @@ print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Vortex version to install (latest)
-VERSION="v0.5.0"
+# Vortex version to install - automatically fetch latest from GitHub
+# Override with VORTEX_VERSION environment variable for testing
 REPO="exec/vortex"
+if [ -n "$VORTEX_VERSION" ]; then
+    VERSION="$VORTEX_VERSION"
+else
+    VERSION=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | cut -d'"' -f4)
+    if [ -z "$VERSION" ]; then
+        # Fallback if API fails
+        VERSION="v0.5.0"
+    fi
+fi
 
 print_status "🚀 Installing Vortex ${VERSION} - The Docker Killer"
 echo
@@ -33,8 +42,8 @@ OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 
 case $ARCH in
-    x86_64) ARCH="x86_64" ;;
-    aarch64|arm64) ARCH="aarch64" ;;
+    x86_64) ARCH="amd64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
     armv7*) ARCH="armv7" ;;
     *) print_error "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
@@ -42,11 +51,37 @@ esac
 case $OS in
     linux)
         print_status "Detected Linux system"
-        # Use simplified naming from GitHub Actions artifacts
-        if [[ $ARCH == "x86_64" ]]; then
-            PACKAGE="vortex-linux-amd64.tar.gz"
+        # Check if we're on Arch Linux
+        if [[ -f /etc/arch-release ]]; then
+            ARCH_PACKAGE_TYPE="arch"
+        elif [[ -f /etc/redhat-release ]] || command -v dnf &> /dev/null || command -v yum &> /dev/null; then
+            ARCH_PACKAGE_TYPE="rpm"
         else
-            print_error "Unsupported Linux architecture: $ARCH (only x86_64/amd64 supported)"
+            ARCH_PACKAGE_TYPE="generic"
+        fi
+
+        # Use simplified naming from GitHub Actions artifacts
+        if [[ $ARCH == "amd64" ]]; then
+            if [[ $ARCH_PACKAGE_TYPE == "arch" ]]; then
+                PACKAGE="vortex-${VERSION}-x86_64-unknown-linux-gnu.pkg.tar.gz"
+            elif [[ $ARCH_PACKAGE_TYPE == "rpm" ]]; then
+                # RPM packages are built as vortex-VERSION-1.x86_64.rpm
+                PACKAGE="vortex-${VERSION}-1.x86_64.rpm"
+            else
+                PACKAGE="vortex-linux-amd64.tar.gz"
+            fi
+        elif [[ $ARCH == "arm64" ]]; then
+            if [[ $ARCH_PACKAGE_TYPE == "arch" ]]; then
+                print_error "Arch Linux ARM64 packages not yet available"
+                exit 1
+            elif [[ $ARCH_PACKAGE_TYPE == "rpm" ]]; then
+                print_error "RPM ARM64 packages not yet available"
+                exit 1
+            else
+                PACKAGE="vortex-linux-arm64.tar.gz"
+            fi
+        else
+            print_error "Unsupported Linux architecture: $ARCH (only amd64 and arm64 supported)"
             exit 1
         fi
         INSTALL_CMD="tar -xzf"
@@ -54,9 +89,9 @@ case $OS in
     darwin)
         print_status "Detected macOS system"
         # Use simplified naming from GitHub Actions artifacts
-        if [[ $ARCH == "aarch64" ]]; then
+        if [[ $ARCH == "arm64" ]]; then
             PACKAGE="vortex-macos-arm64.tar.gz"
-        elif [[ $ARCH == "x86_64" ]]; then
+        elif [[ $ARCH == "amd64" ]]; then
             PACKAGE="vortex-macos-amd64.tar.gz"
         else
             print_error "Unsupported macOS architecture: $ARCH"
@@ -95,11 +130,48 @@ print_success "Download completed!"
 case $PACKAGE in
     *.deb)
         print_status "Installing Debian package..."
-        $INSTALL_CMD "$PACKAGE"
+        sudo dpkg -i "$PACKAGE"
         ;;
     *.rpm)
         print_status "Installing RPM package..."
+        if command -v dnf &> /dev/null; then
+            sudo dnf install -y "$PACKAGE"
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y "$PACKAGE"
+        else
+            # Fallback to rpm command if dnf/yum not available
+            sudo rpm -ivh "$PACKAGE"
+        fi
+        ;;
+    *.pkg.tar.gz)
+        print_status "Installing Arch package..."
         $INSTALL_CMD "$PACKAGE"
+
+        # Find the vortex binary and copy it to /usr/bin
+        BINARY_PATH=$(find . -name "vortex" -type f | head -1)
+        if [[ -n "$BINARY_PATH" ]]; then
+            print_status "Installing binary to /usr/bin/vortex"
+            sudo cp "$BINARY_PATH" /usr/bin/vortex
+            sudo chmod +x /usr/bin/vortex
+        else
+            print_error "Could not find vortex binary in extracted package"
+            exit 1
+        fi
+
+        # Install systemd service on Linux
+        print_status "Installing systemd service..."
+        SERVICE_PATH="$TEMP_DIR/usr/share/vortex/vortexd.service"
+        if [[ -f "$SERVICE_PATH" ]]; then
+            print_status "Found systemd service file"
+            print_status "Installing service to /etc/systemd/system/vortexd.service"
+            sudo cp "$SERVICE_PATH" /etc/systemd/system/vortexd.service
+            sudo systemctl daemon-reload
+            sudo systemctl enable vortexd
+            sudo systemctl start vortexd
+            print_success "Systemd service installed and started!"
+        else
+            print_warning "Systemd service file not found - manual installation may be needed"
+        fi
         ;;
     *.tar.gz)
         print_status "Extracting binary..."

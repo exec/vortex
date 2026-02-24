@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -71,7 +72,9 @@ fn test_vortex_help_commands() -> Result<()> {
 fn test_version_and_basic_info() -> Result<()> {
     let version_output = run_vortex_expect_success(&["--version"])?;
     assert!(version_output.contains("vortex"));
-    assert!(version_output.contains("0.5.0"));
+    // Check for the version from Cargo.toml (supports v0.5.3, 1.0.0-rc.1, etc.)
+    let version = env!("CARGO_PKG_VERSION");
+    assert!(version_output.contains(version));
 
     Ok(())
 }

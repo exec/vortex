@@ -13,7 +13,7 @@ use vortex::{
 #[command(
     name = "vortex",
     about = "Vortex - Lightning-fast ephemeral VM platform",
-    version = "0.5.0"
+    version = env!("CARGO_PKG_VERSION")
 )]
 struct Cli {
     #[command(subcommand)]
