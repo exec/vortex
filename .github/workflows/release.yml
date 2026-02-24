@@ -220,8 +220,11 @@ jobs:
           else
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
+          VERSION=${TAG_NAME#v}
           echo "TAG_NAME=$TAG_NAME"
+          echo "VERSION=$VERSION"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Install dependencies
         run: |
@@ -265,14 +268,15 @@ jobs:
       - name: Create archive
         working-directory: package
         run: |
-          tar -czf ../${{ steps.version_vars.outputs.tag_name }}-linux-amd64.tar.gz *
+          tar -czf ../vortex-${{ steps.version_vars.outputs.version }}-linux-amd64.tar.gz *
 
       - name: Release and Upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="${{ steps.version_vars.outputs.tag_name }}"
-          ARCHIVE_NAME="${{ steps.version_vars.outputs.tag_name }}-linux-amd64.tar.gz"
+          VERSION="${{ steps.version_vars.outputs.version }}"
+          ARCHIVE_NAME="vortex-$VERSION-linux-amd64.tar.gz"
 
           # Create release if it doesn't exist
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
