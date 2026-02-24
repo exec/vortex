@@ -68,7 +68,7 @@ case $OS in
                 # RPM packages are built as vortex-VERSION-1.x86_64.rpm
                 PACKAGE="vortex-${VERSION}-1.x86_64.rpm"
             else
-                PACKAGE="vortex-linux-amd64.tar.gz"
+                PACKAGE="vortex-${VERSION}-linux-amd64.tar.gz"
             fi
         elif [[ $ARCH == "arm64" ]]; then
             if [[ $ARCH_PACKAGE_TYPE == "arch" ]]; then
@@ -78,7 +78,7 @@ case $OS in
                 print_error "RPM ARM64 packages not yet available"
                 exit 1
             else
-                PACKAGE="vortex-linux-arm64.tar.gz"
+                PACKAGE="vortex-${VERSION}-linux-arm64.tar.gz"
             fi
         else
             print_error "Unsupported Linux architecture: $ARCH (only amd64 and arm64 supported)"
@@ -90,9 +90,9 @@ case $OS in
         print_status "Detected macOS system"
         # Use simplified naming from GitHub Actions artifacts
         if [[ $ARCH == "arm64" ]]; then
-            PACKAGE="vortex-macos-arm64.tar.gz"
+            PACKAGE="vortex-${VERSION}-macos-arm64.tar.gz"
         elif [[ $ARCH == "amd64" ]]; then
-            PACKAGE="vortex-macos-amd64.tar.gz"
+            PACKAGE="vortex-${VERSION}-macos-amd64.tar.gz"
         else
             print_error "Unsupported macOS architecture: $ARCH"
             exit 1

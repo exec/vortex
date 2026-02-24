@@ -77,7 +77,19 @@ jobs:
           else
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
-          tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
+
+          # Map target to simplified naming for install.sh compatibility
+          if [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
+            TARGET_NAME="macos-amd64"
+          elif [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
+            TARGET_NAME="macos-arm64"
+          elif [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+            TARGET_NAME="linux-amd64"
+          else
+            TARGET_NAME="${{ matrix.target }}"
+          fi
+
+          tar -czf ../vortex-$TAG_NAME-${TARGET_NAME}.tar.gz *
 
       - name: Release and Upload
         env:
@@ -95,7 +107,84 @@ jobs:
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
 
           # Upload the asset
-          gh release upload "$TAG_NAME" ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
+          gh release upload "$TAG_NAME" ./vortex-$TAG_NAME-${TARGET_NAME}.tar.gz
+
+  build-macos-pkg:
+    runs-on: macos-latest
+    needs: build-macos
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Build universal binary
+        run: |
+          cargo build --release --target x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          lipo -create -output target/universal/release/vortex \
+            target/x86_64-apple-darwin/release/vortex \
+            target/aarch64-apple-darwin/release/vortex
+
+      - name: Create PKG installer
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name }}
+        run: |
+          VERSION=${TAG_NAME#v}
+          mkdir -p package/bin
+          cp target/universal/release/vortex package/bin/
+          cp README.md LICENSE package/
+          cp ./systemd/vortexd.service package/systemd/ || true
+
+          # Create the package structure
+          mkdir -p pkg-build/vortex-$VERSION
+          cp -r package/* pkg-build/vortex-$VERSION/
+
+          # Create the product definition
+          cat > pkg-build/productdef.xml << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <installer-gui-script minSpecVersion="1">
+            <title>Vortex</title>
+            <pkg-ref id="vortex" version="$VERSION" installKBytes="10000">
+              <payload directory="vortex-$VERSION"/>
+            </pkg-ref>
+            <choices-outline>
+              <line choice="vortex"/>
+            </choices-outline>
+            <choice id="vortex">
+              <pkg-ref id="vortex"/>
+            </choice>
+          </installer-gui-script>
+          EOF
+
+          # Build the package
+          pkgbuild --root pkg-build/vortex-$VERSION \
+            --identifier vortex \
+            --version $VERSION \
+            --install-location /usr/local \
+            vortex-$VERSION.pkg
+
+      - name: Release and Upload PKG
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG_NAME="${{ github.event.inputs.tag }}"
+          else
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
+
+          # Create release if it doesn't exist
+          gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
+
+          VERSION=${TAG_NAME#v}
+          gh release upload "$TAG_NAME" ./vortex-$VERSION.pkg
 
   build-linux:
     runs-on: ubuntu-latest
@@ -153,7 +242,7 @@ jobs:
           else
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
-          tar -czf ../vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz *
+          tar -czf ../vortex-$TAG_NAME-linux-amd64.tar.gz *
 
       - name: Release and Upload
         env:
