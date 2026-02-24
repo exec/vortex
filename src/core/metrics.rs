@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 
+/// Maximum age for metrics entries before automatic eviction (in hours)
+const MAX_METRICS_AGE_HOURS: i64 = 24;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmMetrics {
     pub vm_id: String,
@@ -52,8 +55,38 @@ impl MetricsCollector {
         let mut vm_metrics = self.vm_metrics.write().await;
         vm_metrics.insert(metrics.vm_id.clone(), metrics);
 
+        // Evict stale metrics to prevent memory leaks
+        self.evict_stale_metrics().await;
+
         // Update system metrics
         self.update_system_metrics().await;
+    }
+
+    /// Remove metrics entries older than MAX_METRICS_AGE_HOURS
+    async fn evict_stale_metrics(&self) {
+        let now = chrono::Utc::now();
+        let cutoff = now - chrono::Duration::hours(MAX_METRICS_AGE_HOURS);
+
+        let stale_ids: Vec<String> = self
+            .vm_metrics
+            .read()
+            .await
+            .values()
+            .filter(|m| m.timestamp < cutoff)
+            .map(|m| m.vm_id.clone())
+            .collect();
+
+        if !stale_ids.is_empty() {
+            let mut vm_metrics = self.vm_metrics.write().await;
+            for id in &stale_ids {
+                vm_metrics.remove(id);
+            }
+            tracing::debug!(
+                "Evicted {} stale metrics entries (older than {} hours)",
+                stale_ids.len(),
+                MAX_METRICS_AGE_HOURS
+            );
+        }
     }
 
     pub async fn get_vm_metrics(&self, vm_id: &str) -> Option<VmMetrics> {

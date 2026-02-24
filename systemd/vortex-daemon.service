@@ -1,0 +1,46 @@
+# Vortex Ephemeral VM Daemon Service
+# This service manages persistent VM sessions for Vortex
+#
+# Installation (via install.sh or manual):
+#   ./install.sh                         # Auto-installs on Linux
+#   sudo cp vortex-daemon.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable vortex-daemon
+#   sudo systemctl start vortex-daemon
+
+[Unit]
+Description=Vortex Ephemeral VM Daemon
+Documentation=https://vortex.sh/docs
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/vortex daemon start
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+Environment=HOME=%h
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectProc=invisible
+ProcSubset=pid
+ReadWritePaths=%h/.vortex
+ReadWritePaths=%h/.config/vortex
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vortex-daemon
+
+[Install]
+WantedBy=multi-user.target

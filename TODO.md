@@ -17,10 +17,7 @@
 Phase 5 delivers complete workspace initialization with auto-discovery, language detection, service inference, and backend configuration. The system works correctly without backends for configuration generation, and fails gracefully when VM operations require a backend.
 
 ### Remaining
-- [ ] `vortex service list` command to list detected services
-- [ ] `vortex workspace create --from-dir` integration
-- [ ] DevContainer import command (`vortex workspace import`)
-- [ ] `vortex run` backend configuration support
+- [ ] `vortex workspace create --from-dir` integration (low priority)
 
 ---
 
@@ -81,9 +78,8 @@ Phase 5 delivers complete workspace initialization with auto-discovery, language
 ## Immediate Next Steps
 
 ### High Priority
-1. **Complete Phase 5** - Finish the discovery engine integration
-2. **Unit Tests** - Add unit tests for core library modules
-3. **Performance Testing** - Validate speed claims against Docker
+1. **Unit Tests** - Add unit tests for core library modules
+2. **Performance Testing** - Validate speed claims against Docker
 
 ### Medium Priority
 4. **Documentation** - Add more examples and tutorials

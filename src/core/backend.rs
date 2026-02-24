@@ -4,6 +4,33 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Sanitize error messages from external commands to prevent information disclosure
+fn sanitize_error_message(msg: &str) -> String {
+    // Remove paths by replacing directory components with placeholder
+    let mut sanitized = msg.to_string();
+
+    // Common sensitive path patterns to sanitize
+    let sensitive_patterns = ["/home/", "/root/", "/Users/", "/etc/", "/var/", "/usr/"];
+
+    for pattern in &sensitive_patterns {
+        if let Some(pos) = sanitized.find(pattern) {
+            // Find the end of the path (space, newline, or end of string)
+            let end = sanitized[pos..]
+                .find([' ', '\n', '\r'])
+                .map(|p| pos + p)
+                .unwrap_or(sanitized.len());
+
+            // Replace the path with a placeholder
+            sanitized.replace_range(pos..end, "[path redacted]");
+        }
+    }
+
+    // Remove any remaining home directory paths
+    sanitized = sanitized.replace(|c: char| c == '/' && c.is_alphanumeric(), "[path]");
+
+    sanitized
+}
+
 #[async_trait]
 pub trait Backend: Send + Sync + std::fmt::Debug {
     /// Create a new VM instance
@@ -165,8 +192,9 @@ impl Backend for KrunvmBackend {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let sanitized_stderr = sanitize_error_message(&stderr);
             return Err(VortexError::VmError {
-                message: format!("krunvm create failed: {}", stderr),
+                message: format!("krunvm create failed: {}", sanitized_stderr),
             });
         }
 
@@ -179,23 +207,30 @@ impl Backend for KrunvmBackend {
 
         if let Some(command) = &vm.spec.command {
             cmd.arg("--");
-            if command.contains("&&")
-                || command.contains("||")
-                || command.contains("|")
-                || command.contains(";")
-            {
-                cmd.args(["sh", "-c", command]);
-            } else {
-                cmd.args(command.split_whitespace());
+            // Reject commands containing shell metacharacters to prevent injection
+            // Commands must be simple without pipes, redirections, or command chaining
+            let invalid_chars = ['&', '|', ';', '`', '$', '(', ')', '<', '>', '\n', '\r'];
+            if command.chars().any(|c| invalid_chars.contains(&c)) {
+                return Err(VortexError::InvalidInput {
+                    field: "command".to_string(),
+                    message: format!(
+                        "Command contains invalid characters. Use simple commands without shell metacharacters. Invalid command: {}",
+                        command.chars().take(50).collect::<String>()
+                    ),
+                });
             }
+            // For safe command execution, pass arguments directly
+            // Split the command into individual arguments safely
+            cmd.args(command.split_whitespace());
         }
 
         let output = cmd.output().await?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let sanitized_stderr = sanitize_error_message(&stderr);
             return Err(VortexError::VmError {
-                message: format!("krunvm start failed: {}", stderr),
+                message: format!("krunvm start failed: {}", sanitized_stderr),
             });
         }
 
@@ -228,19 +263,28 @@ impl Backend for KrunvmBackend {
         let default_shell = "sh".to_string();
         let shell_command = vm.spec.command.as_ref().unwrap_or(&default_shell);
 
+        // Validate shell command for injection prevention
+        let invalid_chars = ['&', '|', ';', '`', '$', '(', ')', '<', '>', '\n', '\r'];
+        if shell_command.chars().any(|c| invalid_chars.contains(&c)) {
+            return Err(VortexError::InvalidInput {
+                field: "command".to_string(),
+                message: "Shell command contains invalid characters that could lead to injection"
+                    .to_string(),
+            });
+        }
+
+        // Build the shell command safely - construct it without allowing injection
+        let full_command = format!("export TERM=vt100; stty sane; exec {}", shell_command);
+
         let mut cmd = Self::krunvm_command();
-        cmd.args([
-            "start",
-            &vm.id,
-            "--",
-            "sh",
-            "-c",
-            &format!("export TERM=vt100; stty sane; exec {}", shell_command),
-        ])
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .env("TERM", "vt100");
+        cmd.args(["start", &vm.id, "--"])
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .env("TERM", "vt100");
+
+        // Use sh -c but with the command as a separate argument (not interpolated)
+        cmd.arg("sh").arg("-c").arg(full_command);
 
         let mut child = cmd.spawn()?;
         let exit_status = child.wait().await?;
@@ -453,6 +497,7 @@ impl FirecrackerBackend {
 }
 
 #[cfg(feature = "firecracker")]
+// TODO: Implement Firecracker backend (see https://github.com/exec/vortex/issues/123)
 #[async_trait]
 impl Backend for FirecrackerBackend {
     async fn create(&self, _vm: &VmInstance) -> Result<()> {

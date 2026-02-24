@@ -27,8 +27,11 @@ test-*.log
 # Release artifacts
 /release/
 /artifacts/
-*.tar.gz
-*.zip
+
+# Platform packages (build artifacts)
+/platform-packages/
+
+# Temporary files
 
 # Temporary files
 /tmp/

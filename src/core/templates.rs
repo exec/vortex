@@ -231,6 +231,30 @@ impl DevEnvironmentManager {
 
         let workdir = custom_workdir.unwrap_or_else(|| template.default_workdir.clone());
 
+        // Validate startup commands for dangerous shell metacharacters
+        for command in &template.startup_commands {
+            if command.contains('&')
+                || command.contains('|')
+                || command.contains(';')
+                || command.contains('`')
+                || command.contains('$')
+                || command.contains('(')
+                || command.contains(')')
+                || command.contains('<')
+                || command.contains('>')
+                || command.contains('\n')
+                || command.contains('\r')
+            {
+                return Err(VortexError::InvalidInput {
+                    field: "startup_commands".to_string(),
+                    message: format!(
+                        "Startup command contains forbidden shell metacharacters: {}",
+                        command
+                    ),
+                });
+            }
+        }
+
         // Create startup command that sets up the environment
         let setup_commands = template.startup_commands.join(" && ");
         let full_command = format!(
@@ -242,19 +266,31 @@ impl DevEnvironmentManager {
             image: template.base_image.clone(),
             memory: 2048, // 2GB default for dev environments
             cpus: 2,      // 2 cores default
-            ports: template
-                .ports
-                .iter()
-                .filter_map(|p| {
+            ports: {
+                let mut parsed_ports = HashMap::new();
+                for p in &template.ports {
                     let parts: Vec<&str> = p.split(':').collect();
-                    if parts.len() == 2 {
-                        if let (Ok(host), Ok(guest)) = (parts[0].parse(), parts[1].parse()) {
-                            return Some((host, guest));
-                        }
+                    if parts.len() != 2 {
+                        return Err(VortexError::InvalidInput {
+                            field: "ports".to_string(),
+                            message: format!(
+                                "Invalid port mapping format '{}', expected 'host:guest'",
+                                p
+                            ),
+                        });
                     }
-                    None
-                })
-                .collect(),
+                    let host: u16 = parts[0].parse().map_err(|_| VortexError::InvalidInput {
+                        field: "ports".to_string(),
+                        message: format!("Invalid host port in '{}'", p),
+                    })?;
+                    let guest: u16 = parts[1].parse().map_err(|_| VortexError::InvalidInput {
+                        field: "ports".to_string(),
+                        message: format!("Invalid guest port in '{}'", p),
+                    })?;
+                    parsed_ports.insert(host, guest);
+                }
+                parsed_ports
+            },
             volumes: HashMap::new(), // Will be set up by the caller
             environment: template.environment.clone(),
             command: Some(full_command),

@@ -2,6 +2,7 @@
 
 # Vortex Universal Install Script
 # Automatically detects platform and installs the appropriate binary
+# Also installs the systemd service for user-level daemon management
 
 set -e
 
@@ -103,7 +104,7 @@ case $PACKAGE in
     *.tar.gz)
         print_status "Extracting binary..."
         $INSTALL_CMD "$PACKAGE"
-        
+
         # Find the vortex binary and copy it to /usr/local/bin
         BINARY_PATH=$(find . -name "vortex" -type f | head -1)
         if [[ -n "$BINARY_PATH" ]]; then
@@ -118,6 +119,32 @@ case $PACKAGE in
             print_error "Could not find vortex binary in extracted package"
             exit 1
         fi
+
+        # Install systemd service on Linux
+        if [[ $OS == "linux" ]]; then
+            print_status "Installing systemd service..."
+            # Check if we're running from the source repo
+            if [[ -f "$TEMP_DIR/systemd/vortex-daemon.service" ]]; then
+                SERVICE_PATH="$TEMP_DIR/systemd/vortex-daemon.service"
+                print_status "Found systemd service file"
+            else
+                # Try to find from installed location
+                SERVICE_PATH="/usr/local/bin/../share/vortex/vortex-daemon.service"
+                if [[ ! -f "$SERVICE_PATH" ]]; then
+                    print_warning "Systemd service file not found - manual installation may be needed"
+                    SERVICE_PATH=""
+                fi
+            fi
+
+            if [[ -n "$SERVICE_PATH" ]]; then
+                print_status "Installing service to /etc/systemd/system/vortex-daemon.service"
+                sudo cp "$SERVICE_PATH" /etc/systemd/system/vortex-daemon.service
+                sudo systemctl daemon-reload
+                sudo systemctl enable vortex-daemon
+                sudo systemctl start vortex-daemon
+                print_success "Systemd service installed and started!"
+            fi
+        fi
         ;;
 esac
 
@@ -127,13 +154,12 @@ rm -rf "$TEMP_DIR"
 
 print_success "Vortex installation completed! 🎉"
 echo
-print_status "Verify installation:"
-echo -e "  ${CYAN}vortex --version${NC}"
+print_status "Systemd service installed automatically on Linux! 🚀"
 echo
 print_status "Get started:"
 echo -e "  ${CYAN}vortex dev --list${NC}              # List available templates"
 echo -e "  ${CYAN}vortex dev --init${NC}              # Create workspace from current directory"
-echo -e "  ${CYAN}vortex workspace list${NC}          # List persistent workspaces"
+echo -e "  ${CYAN}vortex session create${NC}          # Create a new persistent VM session"
 echo -e "  ${CYAN}vortex --help${NC}                  # Show all available commands"
 echo
 print_status "Documentation: https://github.com/${REPO}"

@@ -1,0 +1,11 @@
+name: project
+description: Auto-generated workspace for project
+backend: krunvm
+
+services:
+  default:
+    type: backend
+    language: python
+    image: python:3.11-slim
+    ports:
+      - 8000:8000

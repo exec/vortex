@@ -125,15 +125,10 @@ run_test "Vortex Core Library" "cargo test --lib --release"
 # Test integration tests from main directory
 run_test "CLI Integration Tests" "cargo test --test cli_integration_test --release"
 
-# Note: Discovery Engine and Orchestrator tests now use vortex CLI subcommands
-# Tests are run as part of the main test suite
+# Test E2E tests from main directory
+run_test "E2E Tests" "cargo test --test e2e_tests --release"
 
-echo
-
-# E2E tests - None currently (require VM infrastructure)
-echo -e "${BLUE}🎯 End-to-End Tests${NC}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${YELLOW}⚠️  E2E tests skipped - require krunvm infrastructure${NC}"
+# Note: Discovery and orchestration tests integrated into CLI as of Phase 5
 
 echo
 
@@ -179,7 +174,6 @@ else
     echo
     echo "🔍 To debug failing tests, run them individually:"
     echo "   cargo test --test cli_integration_test --release"
-    echo "   cargo test --test workspace_integration_tests --release"
-    echo "   ./tests/e2e/devcontainer_migration_test.sh"
+    echo "   cargo test --lib --release"
     exit 1
 fi

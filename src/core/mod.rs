@@ -82,15 +82,16 @@ impl VortexCore {
         self.vm_manager.attach(vm_id).await
     }
 
-    /// Create a new session with optional persistence
+    /// Create a new session with optional persistence and boot-start
     pub async fn create_session(
         &self,
         spec: VmSpec,
         name: Option<String>,
         persistent: bool,
+        boot_start: bool,
     ) -> Result<VmSession> {
         self.session_manager
-            .create_session(spec, name, persistent)
+            .create_session(spec, name, persistent, boot_start)
             .await
     }
 

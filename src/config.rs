@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// Use dirs crate for secure home directory detection
+use dirs::home_dir;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub default_backend: Option<String>,
@@ -115,9 +118,18 @@ impl Config {
 }
 
 fn get_config_path() -> Result<PathBuf> {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| anyhow::anyhow!("Could not determine home directory"))?;
-    
-    Ok(PathBuf::from(home).join(".config").join("ephemeral-vm").join("config.toml"))
+    // Use dirs crate for secure home directory detection
+    let home = home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+
+    // Validate home directory exists and is a directory
+    if !home.exists() || !home.is_dir() {
+        return Err(anyhow::anyhow!("Invalid home directory: {}", home.display()));
+    }
+
+    // Canonicalize to prevent symlink attacks
+    let canonical_home = std::fs::canonicalize(&home).map_err(|e| {
+        anyhow::anyhow!("Failed to canonicalize home directory: {}", e)
+    })?;
+
+    Ok(canonical_home.join(".config").join("vortex").join("config.toml"))
 }

@@ -104,8 +104,6 @@ vortex/
 │       └── ...
 ├── discovery/            # Project discovery module
 │   └── mod.rs           # Language and service detection
-├── vortex-dev/           # Development tools and extensions
-├── vortex-research/      # Experimental features
 ├── tests/                # Integration and E2E tests
 ├── docs/                 # Documentation
 └── .github/workflows/    # CI/CD pipelines

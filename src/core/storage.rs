@@ -2,6 +2,12 @@ use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// Use dirs crate for secure home directory detection
+use dirs::home_dir;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Volume {
     pub id: String,
@@ -18,9 +24,10 @@ pub struct StorageManager {
 
 impl StorageManager {
     pub async fn new() -> Result<Self> {
-        let storage_root = std::env::var("HOME")
-            .map(|h| PathBuf::from(h).join(".vortex").join("storage"))
-            .unwrap_or_else(|_| PathBuf::from("/tmp/vortex/storage"));
+        // Use dirs crate for secure home directory detection
+        let storage_root = home_dir()
+            .map(|h| h.join(".vortex").join("storage"))
+            .unwrap_or_else(|| PathBuf::from("/tmp/vortex/storage"));
 
         std::fs::create_dir_all(&storage_root)?;
 
@@ -31,8 +38,13 @@ impl StorageManager {
         let id = uuid::Uuid::new_v4().to_string();
         let path = self.storage_root.join(&id);
 
-        // Create empty volume file
+        // Create empty volume file with secure permissions
         let file = std::fs::File::create(&path)?;
+        #[cfg(unix)]
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        #[cfg(not(unix))]
+        // On non-Unix systems, just set the length
+        let _ = file;
         file.set_len(size_bytes)?;
 
         Ok(Volume {

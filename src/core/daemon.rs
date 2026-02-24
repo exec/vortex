@@ -50,6 +50,14 @@ impl VortexDaemon {
     pub async fn start(&self) -> Result<()> {
         info!("Starting Vortex daemon on socket: {:?}", self.socket_path);
 
+        // Start boot-start sessions
+        let session_manager = self.session_manager.clone();
+        tokio::spawn(async move {
+            if let Err(e) = session_manager.start_boot_start_sessions().await {
+                warn!("Failed to start boot-start sessions: {}", e);
+            }
+        });
+
         let listener = UnixListener::bind(&self.socket_path).map_err(|e| VortexError::VmError {
             message: format!("Failed to bind to socket: {}", e),
         })?;
@@ -161,12 +169,16 @@ impl VortexDaemon {
                         },
                     };
 
-                    let response_json = serde_json::to_string(&response).unwrap_or_else(|_| {
-                        serde_json::to_string(&SessionResponse::Error {
-                            message: "Failed to serialize response".to_string(),
-                        })
-                        .unwrap()
-                    });
+                    let response_json = match serde_json::to_string(&response) {
+                        Ok(json) => json,
+                        Err(_) => {
+                            error!("Failed to serialize response");
+                            serde_json::to_string(&SessionResponse::Error {
+                                message: "Internal server error".to_string(),
+                            })
+                            .expect("Failed to serialize error response - this should never fail")
+                        }
+                    };
 
                     if let Err(e) = writer
                         .write_all(format!("{}\n", response_json).as_bytes())
@@ -270,11 +282,5 @@ impl DaemonClient {
         Err(VortexError::VmError {
             message: "Daemon failed to start within timeout".to_string(),
         })
-    }
-}
-
-impl Default for DaemonClient {
-    fn default() -> Self {
-        Self::new().expect("Failed to create daemon client")
     }
 }

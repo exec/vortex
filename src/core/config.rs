@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// Use dirs crate for secure home directory detection
+use dirs::home_dir;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VortexConfig {
     pub default_backend: Option<String>,
@@ -238,13 +241,24 @@ impl VortexConfig {
 }
 
 fn get_config_path() -> Result<PathBuf> {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| VortexError::ConfigError {
-            message: "Could not determine home directory".to_string(),
-        })?;
+    // Use dirs crate for secure home directory detection
+    let home = home_dir().ok_or_else(|| VortexError::ConfigError {
+        message: "Could not determine home directory".to_string(),
+    })?;
 
-    Ok(PathBuf::from(home)
+    // Validate home directory exists and is a directory
+    if !home.exists() || !home.is_dir() {
+        return Err(VortexError::ConfigError {
+            message: format!("Invalid home directory: {}", home.display()),
+        });
+    }
+
+    // Canonicalize to prevent symlink attacks
+    let canonical_home = std::fs::canonicalize(&home).map_err(|e| VortexError::ConfigError {
+        message: format!("Failed to canonicalize home directory: {}", e),
+    })?;
+
+    Ok(canonical_home
         .join(".config")
         .join("vortex")
         .join("config.toml"))

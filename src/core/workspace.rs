@@ -392,8 +392,14 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
 
 /// Smart workspace detection - looks for common project indicators
 pub fn detect_workspace_info(dir: &Path) -> Option<WorkspaceInfo> {
+    // Get the directory name, or use a default if it's a root directory
+    let dir_name = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "project".to_string());
+
     let mut info = WorkspaceInfo {
-        name: dir.file_name()?.to_string_lossy().to_string(),
+        name: dir_name,
         suggested_template: "python".to_string(),
         has_devcontainer: false,
         devcontainer_path: None,

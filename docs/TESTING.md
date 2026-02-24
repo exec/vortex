@@ -7,13 +7,8 @@ This document describes the comprehensive test suite for Vortex, the lightning-f
 ```
 tests/
 ├── cli_integration_test.rs     # CLI integration tests
-├── discovery_engine_tests.rs   # Discovery engine tests
-├── orchestrator_integration_tests.rs  # Orchestrator tests
-├── e2e/                       # End-to-end scenarios
-│   ├── test_workspace_demo.sh
-│   └── devcontainer_migration_test.sh
 └── docs/
-    └── TESTING.md             # This file
+    └── TESTING.md              # This file
 ```
 
 ## Running Tests
@@ -52,10 +47,7 @@ cargo test --test cli_integration_test --release -- --nocapture
 ```
 
 #### End-to-End Tests
-```bash
-./tests/e2e/test_workspace_demo.sh
-./tests/e2e/devcontainer_migration_test.sh
-```
+*E2E tests require krunvm infrastructure and are not currently available.*
 
 ## Test Categories
 
@@ -190,7 +182,6 @@ src/
 2. **test-macos**: Platform-specific testing
 3. **benchmark**: Performance validation
 4. **security**: Security audit and unsafe code detection
-5. **integration**: Matrix testing of scenarios
 
 ### CI Environment Variables
 ```bash
@@ -287,7 +278,6 @@ Tests automatically track and report:
 **Permission Errors:**
 ```bash
 chmod +x test_runner.sh
-chmod +x tests/e2e/*.sh
 ```
 
 **Missing Dependencies:**

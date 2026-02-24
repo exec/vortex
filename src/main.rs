@@ -387,6 +387,18 @@ enum SessionSubcommand {
         #[arg(short, long, help = "Force deletion without confirmation")]
         force: bool,
     },
+
+    #[command(about = "Enable autostart for a session (starts on boot)")]
+    EnableAutostart {
+        #[arg(help = "Session ID or name")]
+        session: String,
+    },
+
+    #[command(about = "Disable autostart for a session")]
+    DisableAutostart {
+        #[arg(help = "Session ID or name")]
+        session: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -645,6 +657,12 @@ async fn main() -> Result<()> {
             }
             SessionSubcommand::Delete { session, force } => {
                 handle_session_delete(&session, force).await?;
+            }
+            SessionSubcommand::EnableAutostart { session } => {
+                handle_session_enable_autostart(&session).await?;
+            }
+            SessionSubcommand::DisableAutostart { session } => {
+                handle_session_disable_autostart(&session).await?;
             }
         },
         Commands::Daemon { command } => match command {
@@ -1078,10 +1096,75 @@ fn parse_port_mappings(ports: Vec<String>) -> Result<HashMap<u16, u16>> {
             .parse()
             .with_context(|| format!("Invalid guest port: {}", parts[1]))?;
 
+        // Prevent host_port == guest_port which could cause issues with some backends
+        if host_port == guest_port {
+            return Err(anyhow::anyhow!(
+                "Host port {} cannot be the same as guest port. This may cause port conflicts.",
+                host_port
+            ));
+        }
+
         mappings.insert(host_port, guest_port);
     }
 
     Ok(mappings)
+}
+
+/// Helper function to validate and normalize a host path, preventing path traversal
+fn validate_host_path(path: &str) -> Result<std::path::PathBuf> {
+    let host_path = std::path::PathBuf::from(path);
+
+    // Check for path traversal attempts
+    if path.contains("..") {
+        return Err(anyhow::anyhow!(
+            "Invalid path: path traversal detected. Relative paths with '..' are not allowed."
+        ));
+    }
+
+    // Normalize the path
+    let normalized = if path.starts_with('/') {
+        // Absolute path - check against known safe locations
+        std::fs::canonicalize(&host_path)
+            .map_err(|e| anyhow::anyhow!("Cannot access host path '{}': {}", path, e))?
+    } else {
+        // Relative path - join with current directory
+        std::env::current_dir()
+            .map_err(|e| anyhow::anyhow!("Cannot get current directory: {}", e))?
+            .join(&host_path)
+    };
+
+    // Check if path exists
+    if !normalized.exists() {
+        return Err(anyhow::anyhow!(
+            "Host path does not exist: {}",
+            normalized.display()
+        ));
+    }
+
+    // Prevent mounting sensitive system directories
+    // Only allow paths under user's home directory or the current working directory
+    let home_dir =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+    let canonical_home = home_dir
+        .canonicalize()
+        .map_err(|e| anyhow::anyhow!("Invalid home directory: {}", e))?;
+
+    let current_dir = std::env::current_dir()
+        .map_err(|e| anyhow::anyhow!("Cannot get current directory: {}", e))?;
+    let canonical_cwd = current_dir
+        .canonicalize()
+        .map_err(|e| anyhow::anyhow!("Invalid current directory: {}", e))?;
+
+    if !normalized.starts_with(&canonical_home) && !normalized.starts_with(&canonical_cwd) {
+        return Err(anyhow::anyhow!(
+            "Cannot mount paths outside of home directory ({}) or current directory ({}). Path: {}",
+            canonical_home.display(),
+            canonical_cwd.display(),
+            normalized.display()
+        ));
+    }
+
+    Ok(normalized)
 }
 
 fn parse_volume_mappings(volumes: Vec<String>) -> Result<HashMap<PathBuf, PathBuf>> {
@@ -1096,13 +1179,58 @@ fn parse_volume_mappings(volumes: Vec<String>) -> Result<HashMap<PathBuf, PathBu
             ));
         }
 
-        let host_path = PathBuf::from(parts[0]);
-        let guest_path = PathBuf::from(parts[1]);
+        // Validate host path (prevents path traversal and forbidden directories)
+        let host_path = validate_host_path(parts[0])?;
+
+        // Guest path - just validate it's not empty and doesn't contain path traversal
+        let guest_path_str = parts[1];
+        if guest_path_str.is_empty() {
+            return Err(anyhow::anyhow!("Guest path cannot be empty"));
+        }
+        if guest_path_str.contains("..") {
+            return Err(anyhow::anyhow!(
+                "Invalid guest path: path traversal detected"
+            ));
+        }
+        let guest_path = std::path::PathBuf::from(guest_path_str);
 
         mappings.insert(host_path, guest_path);
     }
 
     Ok(mappings)
+}
+
+/// Validate that a label key matches allowed patterns (alphanumeric, hyphens, underscores, dots)
+fn validate_label_key(key: &str) -> Result<()> {
+    // Label keys must match Kubernetes label key format: [A-Za-z0-9]([-A-Za-z0-9_.]*)?[A-Za-z0-9]
+    if key.is_empty() {
+        return Err(anyhow::anyhow!("Label key cannot be empty"));
+    }
+    if key.len() > 63 {
+        return Err(anyhow::anyhow!("Label key cannot exceed 63 characters"));
+    }
+
+    // Check first character
+    let first = key
+        .chars()
+        .next()
+        .expect("non-empty string must have first char");
+    if !first.is_ascii_alphanumeric() && first != '.' && first != '-' {
+        return Err(anyhow::anyhow!(
+            "Label key must start with alphanumeric, dot, or hyphen"
+        ));
+    }
+
+    for c in key.chars().skip(1) {
+        if !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != '.' {
+            return Err(anyhow::anyhow!(
+                "Label key contains invalid character: '{}'",
+                c
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 fn parse_labels(labels: Vec<String>) -> Result<HashMap<String, String>> {
@@ -1116,6 +1244,9 @@ fn parse_labels(labels: Vec<String>) -> Result<HashMap<String, String>> {
                 label
             ));
         }
+
+        // Validate label key
+        validate_label_key(parts[0])?;
 
         mappings.insert(parts[0].to_string(), parts[1].to_string());
     }
@@ -1170,8 +1301,20 @@ fn parse_sync_back_mappings(sync_back: Vec<String>) -> Result<Vec<(PathBuf, Path
             ));
         }
 
-        let guest_path = PathBuf::from(parts[0]);
-        let host_path = PathBuf::from(parts[1]);
+        // Guest path - validate it's not empty and doesn't contain path traversal
+        let guest_path_str = parts[0];
+        if guest_path_str.is_empty() {
+            return Err(anyhow::anyhow!("Guest path cannot be empty"));
+        }
+        if guest_path_str.contains("..") {
+            return Err(anyhow::anyhow!(
+                "Invalid guest path: path traversal detected"
+            ));
+        }
+        let guest_path = std::path::PathBuf::from(guest_path_str);
+
+        // Validate host path (prevents path traversal and forbidden directories)
+        let host_path = validate_host_path(parts[1])?;
 
         // Create host directory if it doesn't exist
         if let Some(parent) = host_path.parent() {
@@ -1319,7 +1462,9 @@ async fn monitor_vm_performance(vortex: &Arc<VortexCore>, vm_id: &str) {
                     );
 
                     use std::io::{self, Write};
-                    io::stdout().flush().unwrap();
+                    if let Err(e) = io::stdout().flush() {
+                        eprintln!("Warning: Failed to flush stdout: {}", e);
+                    }
                 }
             }
         }
@@ -1976,6 +2121,7 @@ async fn handle_session_create(
             spec: Box::new(spec),
             name: name.clone(),
             persistent,
+            boot_start: false, // New sessions don't auto-start by default
         })
         .await?;
 
@@ -2351,6 +2497,66 @@ async fn handle_attach_session(session_id: &str) -> Result<()> {
         }
         SessionResponse::Error { message } => {
             return Err(anyhow::anyhow!("Failed to attach to session: {}", message));
+        }
+        _ => {
+            return Err(anyhow::anyhow!("Unexpected response from daemon"));
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_session_enable_autostart(session_id: &str) -> Result<()> {
+    let client = DaemonClient::new()?;
+
+    if !client.is_running().await {
+        return Err(anyhow::anyhow!(
+            "Daemon is not running. Start it with: vortex daemon start"
+        ));
+    }
+
+    let response = client
+        .send_command(SessionCommand::EnableBootStart {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
+    match response {
+        SessionResponse::Success => {
+            println!("✅ Autostart enabled for session {}", session_id);
+        }
+        SessionResponse::Error { message } => {
+            return Err(anyhow::anyhow!("Failed to enable autostart: {}", message));
+        }
+        _ => {
+            return Err(anyhow::anyhow!("Unexpected response from daemon"));
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_session_disable_autostart(session_id: &str) -> Result<()> {
+    let client = DaemonClient::new()?;
+
+    if !client.is_running().await {
+        return Err(anyhow::anyhow!(
+            "Daemon is not running. Start it with: vortex daemon start"
+        ));
+    }
+
+    let response = client
+        .send_command(SessionCommand::DisableBootStart {
+            session_id: session_id.to_string(),
+        })
+        .await?;
+
+    match response {
+        SessionResponse::Success => {
+            println!("✅ Autostart disabled for session {}", session_id);
+        }
+        SessionResponse::Error { message } => {
+            return Err(anyhow::anyhow!("Failed to disable autostart: {}", message));
         }
         _ => {
             return Err(anyhow::anyhow!("Unexpected response from daemon"));

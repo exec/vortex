@@ -120,7 +120,7 @@ Vortex automatically detects project structure and suggests optimal VM configura
 | `frontend/`, `ui/`, `web/` | Frontend | Hot reload, static serving |
 | `backend/`, `api/`, `server/` | Backend | API routing, middleware |
 | `worker/`, `jobs/`, `tasks/` | Worker | Background processing |
-| `database/`, `migrations/` | Database | Persistent storage |
+| `database/`, `migrations/` | Database | Persistent storage (requires VM backend with storage support) |
 | `cache/`, `redis/` | Cache | Fast key-value storage |
 
 ### Service Port Mapping
@@ -174,8 +174,8 @@ AI/ML development environment:
 
 ### Prerequisites
 - macOS or Linux (Windows support coming soon)
-- For VM creation: [krunvm](https://github.com/containers/krunvm) or Firecracker
-- Docker/Podman for container images (optional for development)
+- For VM creation: [krunvm](https://github.com/containers/krunvm) (recommended) or Firecracker
+- Vortex runs VMs directly, no Docker/Podman required
 
 ### Install Vortex
 
@@ -293,9 +293,9 @@ vortex workspace init .
 # Output:
 # 🔍 Discovered project structure:
 #   frontend/     → Node.js (package.json detected)
-#   api/          → Python (requirements.txt detected)  
+#   api/          → Python (requirements.txt detected)
 #   worker/       → Go (go.mod detected)
-#   database/     → PostgreSQL (migrations/ detected)
+#   database/     → PostgreSQL (detected from migrations/ subdirectory)
 #
 # ✅ Configuration saved to: vortex.yaml
 # 💡 Run: vortex workspace create --config vortex.yaml

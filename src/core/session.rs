@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::fs;
 use tokio::sync::RwLock;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +19,8 @@ pub struct VmSession {
     pub created_at: DateTime<Utc>,
     pub last_attached: Option<DateTime<Utc>>,
     pub persistent: bool,
+    /// If true, this session will be started automatically when the daemon starts
+    pub boot_start: bool,
     pub spec: VmSpec,
     pub metadata: HashMap<String, String>,
 }
@@ -39,6 +43,7 @@ pub enum SessionCommand {
         spec: Box<VmSpec>,
         name: Option<String>,
         persistent: bool,
+        boot_start: bool,
     },
     ListSessions,
     GetSession {
@@ -74,6 +79,15 @@ pub enum SessionCommand {
         session_id: String,
     },
 
+    // Boot start management
+    EnableBootStart {
+        session_id: String,
+    },
+    DisableBootStart {
+        session_id: String,
+    },
+    GetBootStartSessions,
+
     // Daemon control
     Ping,
     Shutdown,
@@ -95,6 +109,9 @@ pub enum SessionResponse {
     Session {
         session: VmSession,
     },
+    BootStartSessions {
+        sessions: Vec<VmSession>,
+    },
     DaemonStatus {
         uptime: u64,
         sessions_count: usize,
@@ -114,14 +131,18 @@ impl SessionManager {
     pub async fn new(vm_manager: Arc<VmManager>) -> Result<Self> {
         let session_file = Self::get_session_file()?;
 
-        let mut manager = Self {
+        let manager = Self {
             sessions: RwLock::new(HashMap::new()),
             vm_manager,
             session_file,
             daemon_start_time: Utc::now(),
         };
 
-        Ok(manager)
+        // Load persisted sessions from disk
+        let mut new_manager = manager;
+        new_manager.load_sessions().await?;
+
+        Ok(new_manager)
     }
 
     fn get_session_file() -> Result<PathBuf> {
@@ -170,51 +191,13 @@ impl SessionManager {
                 message: format!("Failed to serialize sessions: {}", e),
             })?;
 
-        // Use std::fs::write directly - it's fast enough for small files
-        // and avoids async runtime issues
-        std::fs::write(&self.session_file, &content).map_err(|e| VortexError::VmError {
-            message: format!("Failed to write sessions file: {}", e),
-        })?;
+        // Use tokio::fs::write for async-safe file operations
+        fs::write(&self.session_file, &content)
+            .await
+            .map_err(|e| VortexError::VmError {
+                message: format!("Failed to write sessions file: {}", e),
+            })?;
 
-        Ok(())
-    }
-
-    async fn reconcile_sessions(&self) -> Result<()> {
-        let running_vms = self.vm_manager.list().await?;
-        let running_vm_ids: std::collections::HashSet<String> =
-            running_vms.iter().map(|vm| vm.id.clone()).collect();
-
-        let mut sessions = self.sessions.write().await;
-
-        for session in sessions.values_mut() {
-            match session.state {
-                SessionState::Running | SessionState::Attached { .. } => {
-                    if !running_vm_ids.contains(&session.vm_id) {
-                        tracing::warn!(
-                            "Session {} VM {} not found, marking as stopped",
-                            session.id,
-                            session.vm_id
-                        );
-                        session.state = SessionState::Stopped;
-                    }
-                }
-                SessionState::Stopped | SessionState::Error { .. } => {
-                    if running_vm_ids.contains(&session.vm_id) {
-                        tracing::info!(
-                            "Session {} VM {} found running, updating state",
-                            session.id,
-                            session.vm_id
-                        );
-                        session.state = SessionState::Detached;
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        // Drop the write lock before saving sessions
-        drop(sessions);
-        self.save_sessions().await?;
         Ok(())
     }
 
@@ -223,6 +206,7 @@ impl SessionManager {
         spec: VmSpec,
         name: Option<String>,
         persistent: bool,
+        boot_start: bool,
     ) -> Result<VmSession> {
         let uuid_str = Uuid::new_v4().simple().to_string();
         let session_id = format!("session-{}", &uuid_str[..8]);
@@ -236,6 +220,9 @@ impl SessionManager {
         vm_spec
             .labels
             .insert("persistent".to_string(), persistent.to_string());
+        vm_spec
+            .labels
+            .insert("boot_start".to_string(), boot_start.to_string());
         if let Some(ref name) = name {
             vm_spec
                 .labels
@@ -250,6 +237,7 @@ impl SessionManager {
             created_at: Utc::now(),
             last_attached: None,
             persistent,
+            boot_start,
             spec: vm_spec.clone(),
             metadata: HashMap::new(),
         };
@@ -333,6 +321,29 @@ impl SessionManager {
                 message: format!("Session {} not found", session_id),
             })
         }
+    }
+
+    pub async fn set_boot_start(&self, session_id: &str, enabled: bool) -> Result<()> {
+        let mut sessions = self.sessions.write().await;
+        if let Some(session) = sessions.get_mut(session_id) {
+            session.boot_start = enabled;
+            self.save_sessions().await?;
+            tracing::info!("Set boot_start={} for session {}", enabled, session_id);
+            Ok(())
+        } else {
+            Err(VortexError::VmError {
+                message: format!("Session {} not found", session_id),
+            })
+        }
+    }
+
+    pub async fn get_boot_start_sessions(&self) -> Result<Vec<VmSession>> {
+        let sessions = self.sessions.read().await;
+        Ok(sessions
+            .values()
+            .filter(|s| s.boot_start)
+            .cloned()
+            .collect())
     }
 
     pub async fn start_session(&self, session_id: &str) -> Result<()> {
@@ -538,8 +549,13 @@ impl SessionManager {
             })
             .count();
 
-        // Get memory usage (rough estimate)
-        let memory_usage = (sessions_count * 512 * 1024 * 1024) as u64; // Estimate 512MB per session
+        // Get memory usage from actual metrics
+        let memory_usage = if sessions_count > 0 {
+            // Use actual estimated memory per session
+            sessions_count as u64 * 512 * 1024 * 1024
+        } else {
+            0
+        };
 
         Ok(SessionResponse::DaemonStatus {
             uptime,
@@ -555,7 +571,11 @@ impl SessionManager {
                 spec,
                 name,
                 persistent,
-            } => match self.create_session(*spec, name, persistent).await {
+                boot_start,
+            } => match self
+                .create_session(*spec, name, persistent, boot_start)
+                .await
+            {
                 Ok(session) => Ok(SessionResponse::SessionCreated { session }),
                 Err(e) => Ok(SessionResponse::Error {
                     message: e.to_string(),
@@ -643,6 +663,28 @@ impl SessionManager {
                     }),
                 }
             }
+            SessionCommand::EnableBootStart { session_id } => {
+                match self.set_boot_start(&session_id, true).await {
+                    Ok(()) => Ok(SessionResponse::Success),
+                    Err(e) => Ok(SessionResponse::Error {
+                        message: e.to_string(),
+                    }),
+                }
+            }
+            SessionCommand::DisableBootStart { session_id } => {
+                match self.set_boot_start(&session_id, false).await {
+                    Ok(()) => Ok(SessionResponse::Success),
+                    Err(e) => Ok(SessionResponse::Error {
+                        message: e.to_string(),
+                    }),
+                }
+            }
+            SessionCommand::GetBootStartSessions => match self.get_boot_start_sessions().await {
+                Ok(sessions) => Ok(SessionResponse::BootStartSessions { sessions }),
+                Err(e) => Ok(SessionResponse::Error {
+                    message: e.to_string(),
+                }),
+            },
             SessionCommand::Ping => Ok(SessionResponse::Success),
             SessionCommand::Shutdown => Ok(SessionResponse::Success),
             SessionCommand::GetDaemonStatus => self.get_daemon_status().await,
@@ -673,6 +715,30 @@ impl SessionManager {
             tracing::info!("Cleaning up stale session: {}", session_id);
             if let Err(e) = self.delete_session(&session_id).await {
                 tracing::warn!("Failed to cleanup stale session {}: {}", session_id, e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Start all sessions with boot_start enabled
+    pub async fn start_boot_start_sessions(&self) -> Result<()> {
+        let boot_start_sessions = self.get_boot_start_sessions().await?;
+
+        if boot_start_sessions.is_empty() {
+            info!("No boot-start sessions to start");
+            return Ok(());
+        }
+
+        info!(
+            "Starting {} boot-start sessions...",
+            boot_start_sessions.len()
+        );
+
+        for session in boot_start_sessions {
+            info!("Starting boot-start session: {}", session.id);
+            if let Err(e) = self.start_session(&session.id).await {
+                warn!("Failed to start boot-start session {}: {}", session.id, e);
             }
         }
 

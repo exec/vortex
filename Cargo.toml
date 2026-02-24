@@ -24,6 +24,8 @@ exclude = [
 default = ["krunvm"]
 # Backend features for different VM technologies
 krunvm = []
+# NOTE: Firecracker backend is not yet implemented. This feature flag is reserved for future work.
+# See: https://github.com/exec/vortex/issues/123
 firecracker = []
 
 [[bin]]
@@ -49,4 +51,3 @@ toml = "0.8"
 assert_cmd = "2.0"
 predicates = "3.0"
 tempfile = "3.0"
-uuid = { version = "1.0", features = ["v4"] }

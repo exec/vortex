@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.4.0). If not provided, will use latest git tag.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -26,11 +31,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get the tag name from the ref or use v0.3.0 for manual runs
+          # Get the tag name from the ref
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.1"
+            # For workflow_dispatch, use provided tag or fallback to latest git tag
+            if [ -n "${{ github.event.inputs.tag }}" ]; then
+              TAG_NAME="${{ github.event.inputs.tag }}"
+            else
+              # Get the latest git tag as fallback
+              TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+            fi
+          fi
+
+          if [ -z "$TAG_NAME" ]; then
+            echo "Error: No tag provided. For manual runs, provide a tag via the GitHub UI."
+            exit 1
           fi
           
           echo "Getting release for tag: $TAG_NAME"
@@ -102,10 +118,11 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.1"
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
           tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
-          
+
       - name: Upload Release Asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -113,7 +130,8 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.1"
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
           gh release upload $TAG_NAME ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
 
@@ -148,10 +166,11 @@ jobs:
           
       - name: Create generic Linux package
         run: |
-          mkdir -p package/bin
+          mkdir -p package/bin package/systemd
           cp target/${{ matrix.target }}/release/vortex package/bin/
           cp README.md LICENSE package/
-          
+          cp ../systemd/vortex-daemon.service package/systemd/
+
           # Create install script
           cat > package/install.sh << 'EOF'
           #!/bin/bash
@@ -176,10 +195,11 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.1"
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
           tar -czf ../vortex-$TAG_NAME-${{ matrix.target }}.tar.gz *
-          
+
       - name: Upload Generic Linux Asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -187,7 +207,8 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.1"
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
           gh release upload $TAG_NAME ./vortex-$TAG_NAME-${{ matrix.target }}.tar.gz
 
@@ -199,18 +220,19 @@ jobs:
         arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Get version
         id: get_version
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
             VERSION="${{ github.ref_name }}"
           else
-            VERSION="v0.3.0"
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
           VERSION=${VERSION#v}  # Remove 'v' prefix
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-      
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -218,12 +240,12 @@ jobs:
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu
           fi
-          
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
-      
+
       - name: Build
         run: |
           TARGET=${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
@@ -231,24 +253,28 @@ jobs:
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
           fi
           cargo build --release --target $TARGET
-          
-      - name: Create DEB package
+
+      - name: Create DEB package ( installs to /usr/bin )
         run: |
           TARGET=${{ matrix.arch == 'amd64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}  # Remove 'v' prefix
-          
+
           mkdir -p deb-package/DEBIAN
-          mkdir -p deb-package/usr/local/bin
+          mkdir -p deb-package/usr/bin
+          mkdir -p deb-package/usr/share/vortex
           mkdir -p deb-package/usr/share/doc/vortex
-          
-          # Copy binary
-          cp target/$TARGET/release/vortex deb-package/usr/local/bin/
-          chmod +x deb-package/usr/local/bin/vortex
-          
+
+          # Copy binary to /usr/bin
+          cp target/$TARGET/release/vortex deb-package/usr/bin/
+          chmod +x deb-package/usr/bin/vortex
+
+          # Copy systemd service file
+          cp ../systemd/vortex-daemon.service deb-package/usr/share/vortex/
+
           # Copy documentation
           cp README.md LICENSE deb-package/usr/share/doc/vortex/
-          
+
           # Create control file
           cat > deb-package/DEBIAN/control << EOF
           Package: vortex
@@ -267,23 +293,46 @@ jobs:
            bidirectional file sync.
           Homepage: https://github.com/exec/vortex
           EOF
-          
+
           # Create postinst script
           cat > deb-package/DEBIAN/postinst << 'EOF'
           #!/bin/bash
           set -e
-          
+
+          echo "Installing Vortex systemd service..."
+          sudo cp /usr/share/vortex/vortex-daemon.service /etc/systemd/system/
+          sudo systemctl daemon-reload
+          sudo systemctl enable vortex-daemon
+          sudo systemctl start vortex-daemon
+
           echo "Vortex installed successfully!"
-          echo "Note: You may need to install krunvm or Firecracker separately."
+          echo "Systemd service installed and started automatically."
           echo "Run 'vortex --help' to get started."
-          
+
           exit 0
           EOF
           chmod +x deb-package/DEBIAN/postinst
-          
+
+          # Create postrm script for clean removal
+          cat > deb-package/DEBIAN/postrm << 'EOF'
+          #!/bin/bash
+          set -e
+
+          if [ "$1" = "remove" ]; then
+              echo "Removing Vortex systemd service..."
+              sudo systemctl disable vortex-daemon 2>/dev/null || true
+              sudo systemctl stop vortex-daemon 2>/dev/null || true
+              sudo rm -f /etc/systemd/system/vortex-daemon.service
+              sudo systemctl daemon-reload
+          fi
+
+          exit 0
+          EOF
+          chmod +x deb-package/DEBIAN/postrm
+
           # Build package
           dpkg-deb --build deb-package vortex_${VERSION}_${{ matrix.arch }}.deb
-          
+
       - name: Upload DEB Asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -291,9 +340,213 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.1"
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
           gh release upload $TAG_NAME ./vortex_${{ steps.get_version.outputs.version }}_${{ matrix.arch }}.deb
+
+  build-arch:
+    needs: get-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
+          VERSION=${VERSION#v}  # Remove 'v' prefix
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+
+      - name: Build
+        run: |
+          TARGET=${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          fi
+          cargo build --release --target $TARGET
+
+      - name: Create PKGARCH package ( installs to /usr/bin )
+        run: |
+          TARGET=${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+          VERSION=${{ github.ref_name }}
+          VERSION=${VERSION#v}  # Remove 'v' prefix
+
+          mkdir -p pkgarch-build/usr/bin
+          mkdir -p pkgarch-build/usr/share/vortex
+          mkdir -p pkgarch-build/usr/share/doc/vortex
+
+          # Copy binary to /usr/bin
+          cp target/$TARGET/release/vortex pkgarch-build/usr/bin/
+          chmod +x pkgarch-build/usr/bin/vortex
+
+          # Copy systemd service file
+          cp ../systemd/vortex-daemon.service pkgarch-build/usr/share/vortex/
+
+          # Copy documentation
+          cp README.md LICENSE pkgarch-build/usr/share/doc/vortex/
+
+          # Create .PKGINFO file
+          cat > pkgarch-build/.PKGINFO << EOF
+          # Generated by makepkg
+          pkgname = vortex
+          pkgver = $VERSION
+          pkgdesc = Lightning-fast ephemeral VM platform
+          url = https://github.com/exec/vortex
+          builddate = $(date +%s)
+          packager = Vortex Contributors <noreply@github.com>
+          size = $(du -sb pkgarch-build | cut -f1)
+          arch = ${{ matrix.arch }}
+          license = MIT
+          backup =
+          optdepends =
+          depends =
+          conflicts =
+          replaces =
+          provides =
+          EOF
+
+          # Create .MTREE file
+          cat > pkgarch-build/.MTREE << EOF
+          #/.snapshots
+          #.MTREE
+          EOF
+
+          # Create PKGBUILD for installation reference
+          cat > pkgarch-build/PKGBUILD << 'EOF'
+          # Maintainer: Vortex Contributors <noreply@github.com>
+          pkgname=vortex
+          pkgver=$VERSION
+          pkgrel=1
+          pkgdesc="Lightning-fast ephemeral VM platform"
+          arch=('x86_64' 'aarch64')
+          url="https://github.com/exec/vortex"
+          license=('MIT')
+          depends=()
+          optdepends=()
+          source=()
+          package() {
+              mkdir -p "$pkgdir/usr/bin"
+              cp /usr/bin/vortex "$pkgdir/usr/bin/"
+              mkdir -p "$pkgdir/usr/share/vortex"
+              cp /usr/share/vortex/vortex-daemon.service "$pkgdir/usr/share/vortex/"
+          }
+          EOF
+
+          # Create install script
+          cat > pkgarch-build/vortex.install << 'EOF'
+          #!/bin/bash
+
+          post_install() {
+              echo "Installing Vortex systemd service..."
+              cp /usr/share/vortex/vortex-daemon.service /etc/systemd/system/
+              systemctl daemon-reload
+              systemctl enable vortex-daemon
+              systemctl start vortex-daemon
+              echo "Vortex installed successfully! Systemd service started."
+          }
+
+          post_remove() {
+              systemctl disable vortex-daemon 2>/dev/null || true
+              systemctl stop vortex-daemon 2>/dev/null || true
+              rm -f /etc/systemd/system/vortex-daemon.service
+              systemctl daemon-reload
+          }
+
+          post_upgrade() {
+              post_install
+          }
+          EOF
+          chmod +x pkgarch-build/vortex.install
+
+          # Build package using drpm (if available) or create tarball
+          # For GitHub releases, we'll use a tarball with install script
+          cd pkgarch-build
+          tar -czf ../vortex-$VERSION-$TARGET.pkg.tar.gz .
+          cd ..
+
+          # Create a simple install script
+          cat > vortex-arch-install.sh << 'EOF'
+          #!/bin/bash
+          set -e
+
+          echo "Installing Vortex..."
+
+          # Detect architecture
+          ARCH=$(uname -m)
+          case $ARCH in
+              x86_64) TARGET="x86_64-unknown-linux-gnu" ;;
+              aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
+              *) echo "Unsupported architecture: $ARCH" && exit 1 ;;
+          esac
+
+          # Download package
+          VERSION="${1:-v0.5.0}"
+          DOWNLOAD_URL="https://github.com/exec/vortex/releases/download/$VERSION/vortex-$VERSION-$TARGET.pkg.tar.gz"
+
+          TEMP_DIR=$(mktemp -d)
+          echo "Downloading $DOWNLOAD_URL..."
+          curl -sL "$DOWNLOAD_URL" | tar -xzf - -C "$TEMP_DIR"
+
+          # Install
+          echo "Installing to /usr/bin..."
+          sudo mkdir -p /usr/bin /usr/share/vortex /usr/share/doc/vortex
+          sudo cp "$TEMP_DIR/usr/bin/vortex" /usr/bin/
+          sudo cp "$TEMP_DIR/usr/share/vortex/vortex-daemon.service" /usr/share/vortex/
+          sudo cp "$TEMP_DIR/usr/share/doc/vortex/README.md" /usr/share/doc/vortex/
+          sudo cp "$TEMP_DIR/usr/share/doc/vortex/LICENSE" /usr/share/doc/vortex/
+
+          # Install systemd service
+          echo "Installing systemd service..."
+          sudo cp /usr/share/vortex/vortex-daemon.service /etc/systemd/system/
+          sudo systemctl daemon-reload
+          sudo systemctl enable vortex-daemon
+          sudo systemctl start vortex-daemon
+
+          # Cleanup
+          rm -rf "$TEMP_DIR"
+
+          echo "Vortex installed successfully!"
+          echo "Systemd service enabled and started."
+          echo "Run 'vortex --help' to get started."
+          EOF
+          chmod +x vortex-arch-install.sh
+
+      - name: Upload Arch Package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
+          VERSION=${TAG_NAME#v}
+          TARGET=${{ matrix.arch == 'x86_64' && 'x86_64-unknown-linux-gnu' || 'aarch64-unknown-linux-gnu' }}
+          gh release upload $TAG_NAME ./vortex-$VERSION-$TARGET.pkg.tar.gz
+          gh release upload $TAG_NAME ./vortex-arch-install.sh
 
   build-rpm:
     needs: get-release
@@ -399,7 +652,8 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.1"
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
           VERSION=${TAG_NAME#v}  # Remove 'v' prefix
           gh release upload $TAG_NAME ./vortex-$VERSION-1.${{ matrix.arch }}.rpm
@@ -483,13 +737,14 @@ jobs:
           
           chmod +x install.sh
           
-      - name: Upload Install Script  
+      - name: Upload Install Script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
             TAG_NAME="${{ github.ref_name }}"
           else
-            TAG_NAME="v0.3.1"
+            # For workflow_dispatch, use latest git tag or default to v0.5.0
+            TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
           gh release upload $TAG_NAME ./install.sh --clobber

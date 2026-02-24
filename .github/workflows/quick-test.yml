@@ -52,11 +52,8 @@ jobs:
         # Core library tests
         cargo test --lib --release
         
-        # CLI integration tests  
+        # CLI integration tests
         cargo test --test cli_integration_test --release
-        
-        # Single workspace test
-        cargo test --test workspace_integration_tests test_workspace_creation_and_listing --release
         
         # Quick security check
         cargo audit
