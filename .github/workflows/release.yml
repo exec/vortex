@@ -47,7 +47,8 @@ jobs:
           if [ -z "$TAG_NAME" ]; then
             echo "Error: No tag provided. For manual runs, provide a tag via the GitHub UI."
             exit 1
-          
+          fi
+
           echo "Getting release for tag: $TAG_NAME"
           
           # Get existing release info
