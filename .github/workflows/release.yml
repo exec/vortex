@@ -220,8 +220,11 @@ jobs:
           else
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
           fi
+          VERSION=${TAG_NAME#v}
           echo "TAG_NAME=$TAG_NAME"
+          echo "VERSION=$VERSION"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Install dependencies
         run: |
