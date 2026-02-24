@@ -91,9 +91,12 @@ jobs:
 
           echo "TAG_NAME=$TAG_NAME"
           echo "TARGET_NAME=$TARGET_NAME"
-          echo "archive_name=vortex-$TAG_NAME-${TARGET_NAME}.tar.gz" >> $GITHUB_OUTPUT
+          # Use VERSION without 'v' prefix for archive naming
+          VERSION=${TAG_NAME#v}
+          echo "archive_name=vortex-$VERSION-${TARGET_NAME}.tar.gz" >> $GITHUB_OUTPUT
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "target_name=$TARGET_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create archive
         working-directory: package
@@ -105,6 +108,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="${{ steps.version_vars.outputs.tag_name }}"
+          VERSION="${{ steps.version_vars.outputs.version }}"
           ARCHIVE_NAME="${{ steps.version_vars.outputs.archive_name }}"
 
           # Create release if it doesn't exist
@@ -261,14 +265,15 @@ jobs:
       - name: Create archive
         working-directory: package
         run: |
-          tar -czf ../vortex-${{ steps.version_vars.outputs.tag_name }}-linux-amd64.tar.gz *
+          tar -czf ../vortex-${{ steps.version_vars.outputs.version }}-linux-amd64.tar.gz *
 
       - name: Release and Upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="${{ steps.version_vars.outputs.tag_name }}"
-          ARCHIVE_NAME="vortex-${{ steps.version_vars.outputs.tag_name }}-linux-amd64.tar.gz"
+          VERSION="${{ steps.version_vars.outputs.version }}"
+          ARCHIVE_NAME="vortex-$VERSION-linux-amd64.tar.gz"
 
           # Create release if it doesn't exist
           gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "" --draft=false --latest=false || true
