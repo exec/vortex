@@ -119,6 +119,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           tar -czf ../vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz *
 
       - name: Upload Release Asset
@@ -186,6 +187,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           tar -czf ../vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz *
 
       - name: Upload Generic Linux Asset
@@ -197,6 +199,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           gh release upload $TAG_NAME ./vortex-$TAG_NAME-x86_64-unknown-linux-gnu.tar.gz
 
   build-deb:
@@ -213,6 +216,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           VERSION=${VERSION#v}  # Remove 'v' prefix
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -337,6 +341,7 @@ jobs:
           else
             # For workflow_dispatch, use latest git tag or default to v0.5.0
             VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.5.0")
+          fi
           VERSION=${VERSION#v}  # Remove 'v' prefix
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
