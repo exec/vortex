@@ -107,42 +107,6 @@ enum Commands {
     #[command(about = "Show available templates and aliases")]
     Templates,
 
-    #[command(about = "Start interactive shell in VM")]
-    Shell {
-        #[arg(
-            help = "VM image (alpine, ubuntu, node, etc.)",
-            default_value = "alpine"
-        )]
-        image: String,
-
-        #[arg(short, long, help = "Memory in MB", default_value = "512")]
-        memory: u32,
-
-        #[arg(short, long, help = "CPU cores", default_value = "1")]
-        cpus: u32,
-
-        #[arg(short, long, help = "Port forwarding (host:guest)")]
-        port: Vec<String>,
-
-        #[arg(short = 'v', long, help = "Volume mounts (host:guest)")]
-        volume: Vec<String>,
-
-        #[arg(short = 's', long, help = "Shell to use", default_value = "sh")]
-        shell: String,
-
-        #[arg(long, help = "Skip interactive banner")]
-        quiet: bool,
-
-        #[arg(
-            long,
-            help = "Copy contents of host directory to VM directory (host:guest)"
-        )]
-        copy_to: Vec<String>,
-
-        #[arg(short = 'w', long, help = "Set working directory inside VM")]
-        workdir: Option<String>,
-    },
-
     #[command(about = "Show VM metrics")]
     Metrics {
         #[arg(help = "VM ID (optional - shows all if omitted)")]
@@ -429,7 +393,6 @@ async fn main() -> Result<()> {
     // Check if any command is using quiet mode
     let is_quiet = match &cli.command {
         Commands::Run { quiet, .. } => *quiet,
-        Commands::Shell { quiet, .. } => *quiet,
         Commands::Dev { quiet, .. } => *quiet,
         _ => false,
     };
@@ -516,22 +479,6 @@ async fn main() -> Result<()> {
         }
         Commands::Templates => {
             show_templates().await?;
-        }
-        Commands::Shell {
-            image,
-            memory,
-            cpus,
-            port,
-            volume,
-            shell,
-            quiet,
-            copy_to,
-            workdir,
-        } => {
-            start_shell(
-                &vortex, image, memory, cpus, port, volume, shell, quiet, copy_to, workdir,
-            )
-            .await?;
         }
         Commands::Metrics { vm_id } => {
             show_metrics(&vortex, vm_id.as_deref()).await?;
@@ -912,101 +859,6 @@ async fn show_templates() -> Result<()> {
     for (alias, image) in &config.image_aliases {
         println!("  {} -> {}", alias, image);
     }
-
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn start_shell(
-    vortex: &Arc<VortexCore>,
-    image: String,
-    memory: u32,
-    cpus: u32,
-    port: Vec<String>,
-    volume: Vec<String>,
-    shell: String,
-    quiet: bool,
-    copy_to: Vec<String>,
-    workdir: Option<String>,
-) -> Result<()> {
-    let config = VortexConfig::load()?;
-    let resolved_image = config.resolve_image(&image);
-
-    info!("Starting interactive shell in {} VM...", resolved_image);
-
-    // Parse copy_to mappings
-    let copy_mappings = parse_copy_mappings(copy_to)?;
-    let mut volumes = parse_volume_mappings(volume)?;
-
-    // Build the shell command with workdir and copy operations
-    let mut shell_cmd = String::new();
-
-    // Handle copy operations by mounting source and copying to destination
-    for (i, (host_path, dest_path)) in copy_mappings.iter().enumerate() {
-        let temp_mount = format!("/tmp/vortex_copy_{}", i);
-        // Mount the host directory temporarily
-        volumes.insert(host_path.clone(), PathBuf::from(&temp_mount));
-        // Copy from temp mount to destination
-        shell_cmd.push_str(&format!(
-            "mkdir -p '{}' && cp -r {}/* '{}' 2>/dev/null || true; ",
-            dest_path.display(),
-            temp_mount,
-            dest_path.display()
-        ));
-    }
-
-    // Change to workdir if specified
-    if let Some(wd) = &workdir {
-        shell_cmd.push_str(&format!("cd '{}'; ", wd));
-    }
-
-    // Add the actual shell
-    shell_cmd.push_str(&format!("exec {}", shell));
-
-    let spec = VmSpec {
-        image: resolved_image,
-        memory,
-        cpus,
-        ports: parse_port_mappings(port)?,
-        volumes,
-        environment: HashMap::new(),
-        command: Some(shell_cmd),
-        labels: HashMap::new(),
-        network_config: None,
-        resource_limits: ResourceLimits::default(),
-        backend: None,
-    };
-
-    let vm = vortex.create_vm(spec).await?;
-    info!("VM {} created. Connecting to interactive shell...", vm.id);
-
-    if !quiet {
-        println!();
-        println!("╭─ Interactive Shell ─ {} ─", vm.id);
-        println!("│");
-        println!("│  Image:     {}", vm.spec.image);
-        println!(
-            "│  Resources: {}MB RAM, {} CPU(s)",
-            vm.spec.memory, vm.spec.cpus
-        );
-        if !vm.spec.ports.is_empty() {
-            println!("│  Ports:     {:?}", vm.spec.ports);
-        }
-        if !vm.spec.volumes.is_empty() {
-            println!("│  Volumes:   {:?}", vm.spec.volumes);
-        }
-        println!("│");
-        println!("│  Type 'exit' to leave the shell");
-        println!("╰─────────────────────────────────────");
-        println!();
-    }
-
-    // Attach to interactive session
-    vortex.attach_vm(&vm.id).await?;
-
-    // Cleanup when done
-    info!("Shell session ended. Cleaning up VM {}...", vm.id);
-    vortex.vm_manager.cleanup(&vm.id).await?;
 
     Ok(())
 }
