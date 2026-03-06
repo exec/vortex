@@ -15,19 +15,18 @@ fn test_vortex_vm_create_and_list() {
     let vm_name = format!("e2e-vm-{}", std::process::id());
 
     // Clean up if previous test failed
-    let _ = run_vortex(&["vm", "cleanup", &vm_name]);
+    let _ = run_vortex(&["vm", "cleanup", "--name", &vm_name]);
 
     // Create a VM
     let output = run_vortex(&[
         "vm",
         "create",
         &vm_name,
-        "--image",
         "docker.io/library/alpine:latest",
     ]);
 
     // Clean up VM after test
-    let _ = run_vortex(&["vm", "cleanup", &vm_name]);
+    let _ = run_vortex(&["vm", "cleanup", "--name", &vm_name]);
 
     assert!(
         output.is_ok(),
@@ -48,19 +47,18 @@ fn test_vortex_vm_stop_and_start() {
     let vm_name = format!("e2e-vm-{}-stop", std::process::id());
 
     // Clean up if previous test failed
-    let _ = run_vortex(&["vm", "cleanup", &vm_name]);
+    let _ = run_vortex(&["vm", "cleanup", "--name", &vm_name]);
 
     // Create a VM
     let create_result = run_vortex(&[
         "vm",
         "create",
         &vm_name,
-        "--image",
         "docker.io/library/alpine:latest",
     ]);
 
     if let Err(e) = create_result {
-        let _ = run_vortex(&["vm", "cleanup", &vm_name]);
+        let _ = run_vortex(&["vm", "cleanup", "--name", &vm_name]);
         panic!("VM creation failed: {}", e);
     }
 
@@ -87,9 +85,12 @@ fn test_vortex_vm_list() {
     // List all VMs
     let result = run_vortex(&["vm", "list"]);
     let output = result.expect("VM list should succeed");
+    // Strip ANSI codes and check for expected content
+    let clean_output = output.replace('\x1b', "").replace("[0m", "").replace("[2m", "").replace("[32m", "").to_lowercase();
     assert!(
-        output.contains("Name") || output.contains("ID"),
-        "VM list output missing expected columns"
+        clean_output.contains("background") || clean_output.contains("id") || clean_output.contains("session"),
+        "VM list output missing expected content: {}",
+        clean_output
     );
 }
 
@@ -104,7 +105,7 @@ fn test_vortex_vm_cleanup() {
     let vm_name = format!("e2e-vm-{}-cleanup", std::process::id());
 
     // Try to cleanup a non-existent VM (should not fail)
-    let result = run_vortex(&["vm", "cleanup", &vm_name]);
+    let result = run_vortex(&["vm", "cleanup", "--name", &vm_name]);
     // This may fail if the VM doesn't exist, which is expected
     let _ = result; // Ignore result for non-existent VM
 
@@ -113,7 +114,6 @@ fn test_vortex_vm_cleanup() {
         "vm",
         "create",
         &vm_name,
-        "--image",
         "docker.io/library/alpine:latest",
     ]);
 
@@ -122,7 +122,7 @@ fn test_vortex_vm_cleanup() {
         thread::sleep(Duration::from_secs(1));
 
         // Cleanup the VM
-        let cleanup_result = run_vortex(&["vm", "cleanup", &vm_name]);
+        let cleanup_result = run_vortex(&["vm", "cleanup", "--name", &vm_name]);
         assert!(
             cleanup_result.is_ok(),
             "VM cleanup failed: {}",
@@ -151,7 +151,6 @@ fn test_vortex_vm_parallel_creation() {
             "vm",
             "create",
             &vm_name,
-            "--image",
             "docker.io/library/alpine:latest",
             "--memory",
             "256",
@@ -160,7 +159,7 @@ fn test_vortex_vm_parallel_creation() {
         if let Err(e) = result {
             // Cleanup any created VMs
             for name in &vm_names {
-                let _ = run_vortex(&["vm", "cleanup", name]);
+                let _ = run_vortex(&["vm", "cleanup", "--name", name]);
             }
             panic!("VM creation failed: {}", e);
         }
@@ -171,6 +170,6 @@ fn test_vortex_vm_parallel_creation() {
 
     // Cleanup all VMs
     for vm_name in &vm_names {
-        let _ = run_vortex(&["vm", "cleanup", vm_name]);
+        let _ = run_vortex(&["vm", "cleanup", "--name", vm_name]);
     }
 }

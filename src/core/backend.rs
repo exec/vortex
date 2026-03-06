@@ -153,9 +153,12 @@ impl KrunvmBackend {
         Ok(Self)
     }
 
-    /// Create a krunvm Command with proper environment setup for macOS
+    /// Create a krunvm Command wrapped in buildah unshare
+    /// krunvm requires running inside a buildah unshare session for proper namespace isolation
     fn krunvm_command() -> tokio::process::Command {
-        let mut cmd = tokio::process::Command::new("krunvm");
+        let mut cmd = tokio::process::Command::new("buildah");
+        cmd.arg("unshare");
+        cmd.arg("krunvm");
 
         // Set library path for krunvm on macOS using known homebrew path
         if cfg!(target_os = "macos") {

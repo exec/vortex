@@ -332,9 +332,8 @@ impl VmManager {
                     updated_at: chrono::Utc::now(),
                 }
             } else {
-                return Err(VortexError::VmError {
-                    message: format!("VM {} not found", vm_id),
-                });
+                // VM doesn't exist - consider this a no-op for cleanup
+                return Ok(());
             }
         };
 

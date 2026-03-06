@@ -18,6 +18,22 @@ A next-generation distributed development platform that automatically maps proje
 
 ## 🚀 Quick Start
 
+### Plugin System (Phase 5 - Current)
+```bash
+# List installed plugins
+vortex plugin list
+
+# Add a plugin from GitHub (e.g., vortex-web)
+vortex plugin add exec/vortex-web
+
+# Remove a plugin
+vortex plugin remove vortex-web
+
+# Enable/disable a plugin
+vortex plugin enable vortex-web
+vortex plugin disable vortex-web
+```
+
 ### Interactive Auto-Discovery (Phase 5 - Current)
 ```bash
 # Start interactive workspace setup
@@ -130,6 +146,59 @@ When Vortex detects services, it automatically maps common ports:
 - Backend: 8000, 8080, 3000, 5000
 - Database: 5432 (PostgreSQL), 3306 (MySQL), 27017 (MongoDB)
 - Cache: 6379 (Redis), 11211 (Memcached)
+
+## 🧩 Plugin System
+
+Vortex supports a plugin system for extending functionality:
+
+### Adding Plugins
+```bash
+# Add a plugin from GitHub (converts exec/vortex-web to https://github.com/exec/vortex-web.git)
+vortex plugin add exec/vortex-web
+
+# Add with custom name
+vortex plugin add exec/vortex-web --name custom-name
+
+# Add from full URL
+vortex plugin add https://github.com/username/repo.git
+```
+
+### Plugin Structure
+A Vortex plugin is a Rust crate with a `plugin.toml` file in the root:
+
+```toml
+version = "0.1.0"
+description = "Description of your plugin"
+author = "Your Name"
+```
+
+The plugin must implement the Vortex plugin trait and be compiled as a shared library.
+
+### Plugin Management
+```bash
+# List installed plugins
+vortex plugin list
+
+# Enable a plugin
+vortex plugin enable vortex-web
+
+# Disable a plugin
+vortex plugin disable vortex-web
+
+# Remove a plugin
+vortex plugin remove vortex-web
+```
+
+### Plugin Storage
+Plugins are stored in `~/.vortex/plugins/<name>` with the following structure:
+```
+~/.vortex/plugins/
+├── vortex-web/
+│   ├── plugin.toml
+│   ├── src/
+│   └── Cargo.toml
+└── <other-plugin>/
+```
 
 ## 🎪 Workspace Templates
 
@@ -267,12 +336,13 @@ vortex workspace cluster scale up
 
 ## 🎯 Architecture
 
-### Phase 5 (Current): Directory-to-VM Mapping
+### Phase 5 (Current): Directory-to-VM Mapping & Plugin System
 - ✅ **Auto-discovery** of project structure
 - ✅ **Language detection** and optimal image selection
 - ✅ **Service type inference** from directory patterns
 - ✅ **YAML configuration** generation
 - ✅ **Integrated orchestration** with existing templates
+- ✅ **Plugin system** for extending functionality via git-based modules
 
 ### Upcoming Phases
 - **Phase 6**: Context-aware environments (dev/staging/prod)
@@ -490,6 +560,17 @@ MIT License - see [LICENSE](LICENSE) for details.
 | `vortex daemon stop` | Stop daemon |
 | `vortex daemon status` | Show daemon status |
 | `vortex daemon logs` | Show daemon logs |
+
+### Plugin Commands
+
+| Command | Description |
+|---------|-------------|
+| `vortex plugin list` | List installed plugins |
+| `vortex plugin add <repo>` | Add plugin from GitHub (e.g., `exec/vortex-web`) |
+| `vortex plugin add <repo> --name <name>` | Add with custom name |
+| `vortex plugin remove <name>` | Remove a plugin |
+| `vortex plugin enable <name>` | Enable a plugin |
+| `vortex plugin disable <name>` | Disable a plugin |
 
 ### Session Management Commands
 

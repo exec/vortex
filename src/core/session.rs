@@ -3,9 +3,10 @@ use crate::vm::{VmManager, VmSpec};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::fs;
+use tokio::fs as tokio_fs;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -79,6 +80,14 @@ pub enum SessionCommand {
         session_id: String,
     },
 
+    // Authentication (optional token for daemon access)
+    Authenticate {
+        token: Option<String>,
+    },
+    VerifyToken {
+        token: Option<String>,
+    },
+
     // Boot start management
     EnableBootStart {
         session_id: String,
@@ -146,11 +155,11 @@ impl SessionManager {
     }
 
     fn get_session_file() -> Result<PathBuf> {
-        let home = std::env::var("HOME").map_err(|_| VortexError::VmError {
-            message: "HOME environment variable not set".to_string(),
+        let home = dirs::home_dir().ok_or_else(|| VortexError::VmError {
+            message: "Could not determine home directory".to_string(),
         })?;
 
-        let vortex_dir = PathBuf::from(home).join(".vortex");
+        let vortex_dir = home.join(".vortex");
         std::fs::create_dir_all(&vortex_dir).map_err(|e| VortexError::VmError {
             message: format!("Failed to create vortex directory: {}", e),
         })?;
@@ -163,14 +172,41 @@ impl SessionManager {
             return Ok(());
         }
 
+        // Check file permissions on Unix systems for security
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(&self.session_file).map_err(|e| VortexError::VmError {
+                message: format!("Failed to read sessions file metadata: {}", e),
+            })?;
+
+            let permissions = metadata.permissions();
+            let mode = permissions.mode();
+
+            // Warn if file is world-readable (not strictly 0600)
+            if mode & 0o077 != 0 {
+                tracing::warn!(
+                    "Sessions file {} has insecure permissions (mode: {:o}). \
+                    Expected 0600 (owner read/write only). This may expose VM metadata.",
+                    self.session_file.display(),
+                    mode
+                );
+                // Continue but proceed with caution
+            }
+        }
+
         let content = tokio::fs::read_to_string(&self.session_file)
             .await
             .map_err(|e| VortexError::VmError {
                 message: format!("Failed to read sessions file: {}", e),
             })?;
 
-        let sessions: HashMap<String, VmSession> =
-            serde_json::from_str(&content).unwrap_or_default();
+        // Properly handle JSON errors instead of silently defaulting
+        let sessions: HashMap<String, VmSession> = serde_json::from_str(&content).map_err(|e| {
+            VortexError::VmError {
+                message: format!("Failed to parse sessions file: {}. The file may be corrupted.", e),
+            }
+        })?;
 
         let mut session_map = self.sessions.write().await;
         *session_map = sessions;
@@ -191,12 +227,28 @@ impl SessionManager {
                 message: format!("Failed to serialize sessions: {}", e),
             })?;
 
-        // Use tokio::fs::write for async-safe file operations
-        fs::write(&self.session_file, &content)
-            .await
-            .map_err(|e| VortexError::VmError {
-                message: format!("Failed to write sessions file: {}", e),
-            })?;
+        // Write with secure permissions (0o600 - read/write only by owner)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            tokio_fs::write(&self.session_file, &content)
+                .await
+                .map_err(|e| VortexError::VmError {
+                    message: format!("Failed to write sessions file: {}", e),
+                })?;
+            fs::set_permissions(&self.session_file, fs::Permissions::from_mode(0o600))
+                .map_err(|e| VortexError::VmError {
+                    message: format!("Failed to set session file permissions: {}", e),
+                })?;
+        }
+        #[cfg(not(unix))]
+        {
+            tokio_fs::write(&self.session_file, &content)
+                .await
+                .map_err(|e| VortexError::VmError {
+                    message: format!("Failed to write sessions file: {}", e),
+                })?;
+        }
 
         Ok(())
     }
@@ -688,6 +740,11 @@ impl SessionManager {
             SessionCommand::Ping => Ok(SessionResponse::Success),
             SessionCommand::Shutdown => Ok(SessionResponse::Success),
             SessionCommand::GetDaemonStatus => self.get_daemon_status().await,
+            // Authentication commands - currently no-op (socket permissions handle auth)
+            // Token can be added later for enhanced security
+            SessionCommand::Authenticate { .. } | SessionCommand::VerifyToken { .. } => {
+                Ok(SessionResponse::Success)
+            }
         }
     }
 

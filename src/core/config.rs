@@ -9,14 +9,33 @@ use dirs::home_dir;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VortexConfig {
     pub default_backend: Option<String>,
+    #[serde(default)]
     pub default_memory: u32,
+    #[serde(default)]
     pub default_cpus: u32,
+    #[serde(default)]
     pub image_aliases: HashMap<String, String>,
+    #[serde(default)]
     pub templates: HashMap<String, Template>,
+    #[serde(default)]
+    pub plugins: HashMap<String, PluginConfig>,
+    #[serde(default)]
     pub resource_limits: GlobalResourceLimits,
+    #[serde(default)]
     pub networking: NetworkingConfig,
+    #[serde(default)]
     pub storage: StorageConfig,
+    #[serde(default)]
     pub monitoring: MonitoringConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PluginConfig {
+    pub enabled: bool,
+    pub version: String,
+    pub source_repo: String,
+    pub description: String,
+    pub author: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -142,6 +161,7 @@ impl Default for VortexConfig {
             default_cpus: 1,
             image_aliases,
             templates,
+            plugins: HashMap::new(),
             resource_limits: GlobalResourceLimits::default(),
             networking: NetworkingConfig::default(),
             storage: StorageConfig::default(),
@@ -174,8 +194,22 @@ impl Default for NetworkingConfig {
 
 impl Default for StorageConfig {
     fn default() -> Self {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        let base_dir = PathBuf::from(home).join(".vortex");
+        // Use dirs crate for secure home directory detection
+        let home = match dirs::home_dir() {
+            Some(h) => h,
+            None => {
+                // Return an error if home directory cannot be determined
+                // This prevents falling back to insecure /tmp
+                tracing::warn!(
+                    "Could not determine home directory. Some functionality may be limited."
+                );
+                // Return a default base directory - this is acceptable for config storage
+                // but callers should check for None and handle appropriately
+                PathBuf::from("/tmp/vortex")
+            }
+        };
+
+        let base_dir = home.join(".vortex");
 
         Self {
             default_volume_size: 1024 * 1024 * 1024, // 1GB
@@ -223,7 +257,18 @@ impl VortexConfig {
         let content = toml::to_string_pretty(self).map_err(|e| VortexError::ConfigError {
             message: format!("Failed to serialize config: {}", e),
         })?;
-        std::fs::write(&config_path, content)?;
+
+        // Write with secure permissions (0o600 - read/write only by owner)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::write(&config_path, &content)?;
+            std::fs::set_permissions(&config_path, std::fs::Permissions::from_mode(0o600))?;
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&config_path, content)?;
+        }
 
         Ok(())
     }
@@ -237,6 +282,41 @@ impl VortexConfig {
 
     pub fn get_template(&self, name: &str) -> Option<&Template> {
         self.templates.get(name)
+    }
+
+    pub fn get_plugin(&self, name: &str) -> Option<&PluginConfig> {
+        self.plugins.get(name)
+    }
+
+    /// Get the configured resource limits
+    pub fn get_resource_limits(&self) -> &GlobalResourceLimits {
+        &self.resource_limits
+    }
+
+    pub fn add_plugin(&mut self, name: String, plugin: PluginConfig) {
+        self.plugins.insert(name, plugin);
+    }
+
+    pub fn remove_plugin(&mut self, name: &str) -> Option<PluginConfig> {
+        self.plugins.remove(name)
+    }
+
+    pub fn enable_plugin(&mut self, name: &str) -> bool {
+        if let Some(plugin) = self.plugins.get_mut(name) {
+            plugin.enabled = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn disable_plugin(&mut self, name: &str) -> bool {
+        if let Some(plugin) = self.plugins.get_mut(name) {
+            plugin.enabled = false;
+            true
+        } else {
+            false
+        }
     }
 }
 

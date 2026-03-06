@@ -62,7 +62,8 @@ impl DevEnvironmentManager {
                     ("PYTHONDONTWRITEBYTECODE".to_string(), "1".to_string()),
                 ]),
                 startup_commands: vec![
-                    "apt-get update && apt-get install -y git curl vim nano build-essential".to_string(),
+                    "apt-get update".to_string(),
+                    "apt-get install -y git curl vim nano build-essential".to_string(),
                     "pip install --upgrade pip setuptools wheel".to_string(),
                     "pip install pytest black flake8 mypy ipython jupyter".to_string(),
                 ],
@@ -97,8 +98,8 @@ impl DevEnvironmentManager {
                     ("NPM_CONFIG_CACHE".to_string(), "/cache/npm".to_string()),
                 ]),
                 startup_commands: vec![
-                    "apt-get update && apt-get install -y git curl vim python3 make g++"
-                        .to_string(),
+                    "apt-get update".to_string(),
+                    "apt-get install -y git curl vim python3 make g++".to_string(),
                     "npm install -g yarn typescript ts-node nodemon eslint prettier".to_string(),
                 ],
                 default_workdir: "/app".to_string(),
@@ -139,7 +140,8 @@ impl DevEnvironmentManager {
                     ("RUSTUP_HOME".to_string(), "/cache/rustup".to_string()),
                 ]),
                 startup_commands: vec![
-                    "apt-get update && apt-get install -y git curl vim build-essential".to_string(),
+                    "apt-get update".to_string(),
+                    "apt-get install -y git curl vim build-essential".to_string(),
                     "rustup component add clippy rustfmt rust-src".to_string(),
                     "cargo install cargo-watch cargo-edit cargo-audit".to_string(),
                 ],
@@ -195,7 +197,8 @@ impl DevEnvironmentManager {
                     ("JUPYTER_ENABLE_LAB".to_string(), "yes".to_string()),
                 ]),
                 startup_commands: vec![
-                    "apt-get update && apt-get install -y git curl vim build-essential".to_string(),
+                    "apt-get update".to_string(),
+                    "apt-get install -y git curl vim build-essential".to_string(),
                     "pip install --upgrade pip".to_string(),
                     "pip install torch torchvision tensorflow jupyter pandas numpy matplotlib scikit-learn".to_string(),
                     "pip install transformers datasets accelerate".to_string(),

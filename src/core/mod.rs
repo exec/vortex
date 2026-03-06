@@ -3,6 +3,16 @@
 //! The foundational library for the Vortex ephemeral VM platform.
 //! Provides abstractions for VM lifecycle management, networking, storage,
 //! and extensibility for specialized use cases.
+//!
+//! ## Security Notice
+//!
+//! This library uses a NoOpAuthProvider by default for development purposes.
+//! This provider is INSECURE and should only be used for local development.
+//! Before using in any shared or production environment:
+//! - Implement a proper AuthProvider
+//! - Add authentication to the daemon socket
+//! - Enable plugin signature verification
+//! - Review and restrict resource limits
 
 pub mod auth;
 pub mod backend;

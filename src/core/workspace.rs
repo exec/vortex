@@ -94,10 +94,10 @@ impl WorkspaceManager {
     }
 
     fn get_workspaces_dir() -> Result<PathBuf> {
-        let home = std::env::var("HOME").map_err(|_| VortexError::ConfigError {
-            message: "HOME environment variable not set".to_string(),
+        let home = dirs::home_dir().ok_or_else(|| VortexError::ConfigError {
+            message: "Could not determine home directory".to_string(),
         })?;
-        Ok(PathBuf::from(home).join(".vortex").join("workspaces"))
+        Ok(home.join(".vortex").join("workspaces"))
     }
 
     /// Create a new workspace
@@ -295,6 +295,30 @@ impl WorkspaceManager {
         // Add environment variables
         for (key, value) in &workspace.config.environment_vars {
             spec.environment.insert(key.clone(), value.clone());
+        }
+
+        // Validate custom commands for shell metacharacters
+        for command in &workspace.config.custom_commands {
+            if command.contains('&')
+                || command.contains('|')
+                || command.contains(';')
+                || command.contains('`')
+                || command.contains('$')
+                || command.contains('(')
+                || command.contains(')')
+                || command.contains('<')
+                || command.contains('>')
+                || command.contains('\n')
+                || command.contains('\r')
+            {
+                return Err(VortexError::InvalidInput {
+                    field: "custom_commands".to_string(),
+                    message: format!(
+                        "Custom command contains forbidden shell metacharacters: {}",
+                        command
+                    ),
+                });
+            }
         }
 
         // Build startup command

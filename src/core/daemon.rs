@@ -1,5 +1,6 @@
 use crate::error::{Result, VortexError};
 use crate::session::{SessionCommand, SessionManager, SessionResponse};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -8,10 +9,22 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 
+// Rate limiting configuration
+const MAX_MESSAGE_SIZE: usize = 1024 * 1024; // 1MB limit
+const MAX_REQUESTS_PER_SECOND: u32 = 50;
+const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(1);
+
+#[derive(Clone)]
+struct RateLimitState {
+    count: u32,
+    window_start: u64, // Unix timestamp in seconds
+}
+
 pub struct VortexDaemon {
     session_manager: Arc<SessionManager>,
     socket_path: PathBuf,
     running: Arc<RwLock<bool>>,
+    rate_limiter: Arc<RwLock<HashMap<String, RateLimitState>>>,
 }
 
 impl VortexDaemon {
@@ -31,20 +44,31 @@ impl VortexDaemon {
             session_manager: Arc::new(session_manager),
             socket_path,
             running: Arc::new(RwLock::new(false)),
+            rate_limiter: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
     fn get_socket_path() -> Result<PathBuf> {
-        let home = std::env::var("HOME").map_err(|_| VortexError::VmError {
-            message: "HOME environment variable not set".to_string(),
+        let home = dirs::home_dir().ok_or_else(|| VortexError::VmError {
+            message: "Could not determine home directory".to_string(),
         })?;
 
-        let vortex_dir = PathBuf::from(home).join(".vortex");
+        let vortex_dir = home.join(".vortex");
         std::fs::create_dir_all(&vortex_dir).map_err(|e| VortexError::VmError {
             message: format!("Failed to create vortex directory: {}", e),
         })?;
 
         Ok(vortex_dir.join("daemon.sock"))
+    }
+
+    /// Set secure permissions (0o600 - owner read/write only) on the socket file
+    /// This function exists for documentation purposes; actual permission setting
+    /// is done inline in the start() method after binding.
+    #[allow(dead_code)]
+    fn set_socket_permissions(_path: &PathBuf) -> Result<()> {
+        // On Unix, socket permissions are set after bind() using chmod
+        // On non-Unix systems, socket permissions work differently
+        Ok(())
     }
 
     pub async fn start(&self) -> Result<()> {
@@ -61,6 +85,17 @@ impl VortexDaemon {
         let listener = UnixListener::bind(&self.socket_path).map_err(|e| VortexError::VmError {
             message: format!("Failed to bind to socket: {}", e),
         })?;
+
+        // Set secure permissions on the socket (owner read/write only)
+        // This prevents other users from connecting to the daemon
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&self.socket_path, std::fs::Permissions::from_mode(0o600))
+                .map_err(|e| VortexError::VmError {
+                    message: format!("Failed to set socket permissions: {}", e),
+                })?;
+        }
 
         {
             let mut running = self.running.write().await;
@@ -85,7 +120,7 @@ impl VortexDaemon {
             }
         });
 
-        info!("Vortex daemon started successfully");
+        info!("Vortex daemon started successfully (socket permissions: 0600)");
 
         // Main connection handling loop
         while *self.running.read().await {
@@ -93,10 +128,11 @@ impl VortexDaemon {
                 Ok((stream, _)) => {
                     let session_manager = self.session_manager.clone();
                     let running = self.running.clone();
+                    let rate_limiter = self.rate_limiter.clone();
 
                     tokio::spawn(async move {
                         if let Err(e) =
-                            Self::handle_connection(stream, session_manager, running).await
+                            Self::handle_connection(stream, session_manager, running, rate_limiter).await
                         {
                             error!("Error handling connection: {}", e);
                         }
@@ -133,7 +169,11 @@ impl VortexDaemon {
         mut stream: UnixStream,
         session_manager: Arc<SessionManager>,
         running: Arc<RwLock<bool>>,
+        rate_limiter: Arc<RwLock<HashMap<String, RateLimitState>>>,
     ) -> Result<()> {
+        // Get client identifier before splitting (to avoid borrow issues)
+        let client_id = format!("{:?}", stream.peer_addr().ok());
+
         let (reader, mut writer) = stream.split();
         let mut reader = BufReader::new(reader);
         let mut line = String::new();
@@ -145,6 +185,36 @@ impl VortexDaemon {
                 Ok(_) => {
                     let line = line.trim();
                     if line.is_empty() {
+                        continue;
+                    }
+
+                    // Check message size limit
+                    if line.len() > MAX_MESSAGE_SIZE {
+                        let response = SessionResponse::Error {
+                            message: format!("Message too large. Maximum size is {} bytes.", MAX_MESSAGE_SIZE),
+                        };
+                        if let Err(e) = writer.write_all(format!("{}\n", serde_json::to_string(&response).unwrap()).as_bytes()).await {
+                            error!("Failed to write error response: {}", e);
+                            break;
+                        }
+                        continue;
+                    }
+
+                    // Rate limiting (client_id already captured before stream.split())
+                    let rate_limited = {
+                        let mut limiter = rate_limiter.write().await;
+                        !Self::check_rate_limit(&mut limiter, &client_id)
+                    };
+
+                    if rate_limited {
+                        warn!("Rate limit exceeded for client");
+                        let response = SessionResponse::Error {
+                            message: "Rate limit exceeded. Please slow down.".to_string(),
+                        };
+                        if let Err(e) = writer.write_all(format!("{}\n", serde_json::to_string(&response).unwrap()).as_bytes()).await {
+                            error!("Failed to write rate limit response: {}", e);
+                            break;
+                        }
                         continue;
                     }
 
@@ -196,6 +266,33 @@ impl VortexDaemon {
         }
 
         Ok(())
+    }
+
+    /// Check if rate limit is exceeded for a client
+    fn check_rate_limit(rate_limiter: &mut HashMap<String, RateLimitState>, client_id: &str) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let state = rate_limiter.entry(client_id.to_string()).or_insert(RateLimitState {
+            count: 0,
+            window_start: now,
+        });
+
+        // Reset window if expired
+        if now > state.window_start + RATE_LIMIT_WINDOW.as_secs() {
+            state.count = 0;
+            state.window_start = now;
+        }
+
+        // Check limit
+        if state.count >= MAX_REQUESTS_PER_SECOND {
+            return false; // Rate limited
+        }
+
+        state.count += 1;
+        true // Allowed
     }
 }
 

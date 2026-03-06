@@ -50,21 +50,65 @@ pub enum AuthCredentials {
 }
 
 // No-op auth provider for development
+// WARNING: This provider is INSECURE and should only be used for local development.
+// Before using in any shared environment, implement a proper AuthProvider.
 pub struct NoOpAuthProvider;
 
 #[async_trait]
 impl AuthProvider for NoOpAuthProvider {
-    async fn authenticate(&self, _credentials: &AuthCredentials) -> Result<AuthToken> {
-        Ok(AuthToken {
-            token: "dev-token".to_string(),
-            user_id: "dev-user".to_string(),
-            expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
-            permissions: vec![Permission::AdminAll],
-        })
+    async fn authenticate(&self, credentials: &AuthCredentials) -> Result<AuthToken> {
+        // Require explicit password for NoOpAuthProvider
+        // This prevents accidental use without credentials
+        match credentials {
+            AuthCredentials::UsernamePassword { username, password } => {
+                if password.is_empty() {
+                    return Err(VortexError::AuthError {
+                        message: "NoOpAuthProvider requires a password for authentication. \
+                                  For development, use any non-empty password. \
+                                  For production, implement a proper AuthProvider."
+                            .to_string(),
+                    });
+                }
+                Ok(AuthToken {
+                    token: format!("dev-token-{}", username),
+                    user_id: username.clone(),
+                    expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                    permissions: vec![Permission::AdminAll],
+                })
+            }
+            AuthCredentials::Token { token } => {
+                if token.is_empty() {
+                    return Err(VortexError::AuthError {
+                        message: "Token authentication requires a non-empty token. \
+                                  For NoOpAuthProvider, use the 'username:password' format instead."
+                            .to_string(),
+                    });
+                }
+                Ok(AuthToken {
+                    token: token.clone(),
+                    user_id: format!("token-user-{}", token.chars().take(8).collect::<String>()),
+                    expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                    permissions: vec![Permission::AdminAll],
+                })
+            }
+            AuthCredentials::ApiKey { key } => {
+                if key.is_empty() {
+                    return Err(VortexError::AuthError {
+                        message: "API key authentication requires a non-empty key.".to_string(),
+                    });
+                }
+                Ok(AuthToken {
+                    token: format!("api-token-{}", key),
+                    user_id: format!("api-user-{}", key.chars().take(8).collect::<String>()),
+                    expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                    permissions: vec![Permission::AdminAll],
+                })
+            }
+        }
     }
 
     async fn authorize(&self, _token: &str, _permission: Permission) -> Result<bool> {
-        Ok(true) // Allow all in development
+        Ok(true) // Allow all in development - token validation happens in authenticate
     }
 
     async fn get_user(&self, user_id: &str) -> Result<Option<User>> {
@@ -77,9 +121,9 @@ impl AuthProvider for NoOpAuthProvider {
         }))
     }
 
-    async fn refresh_token(&self, _token: &str) -> Result<AuthToken> {
+    async fn refresh_token(&self, token: &str) -> Result<AuthToken> {
         self.authenticate(&AuthCredentials::Token {
-            token: "dev-token".to_string(),
+            token: token.to_string(),
         })
         .await
     }

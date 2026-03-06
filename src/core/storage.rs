@@ -25,9 +25,19 @@ pub struct StorageManager {
 impl StorageManager {
     pub async fn new() -> Result<Self> {
         // Use dirs crate for secure home directory detection
+        // Note: This will use /tmp if HOME is not set, which is less secure
+        // In production, ensure HOME is set to a secure location
         let storage_root = home_dir()
             .map(|h| h.join(".vortex").join("storage"))
             .unwrap_or_else(|| PathBuf::from("/tmp/vortex/storage"));
+
+        // Warn if falling back to /tmp (world-writable directory)
+        if storage_root.starts_with("/tmp/") {
+            tracing::warn!(
+                "Using /tmp for storage root. This is less secure as /tmp is world-writable. \
+                Please set HOME environment variable to a secure location."
+            );
+        }
 
         std::fs::create_dir_all(&storage_root)?;
 

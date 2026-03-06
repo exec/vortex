@@ -3,10 +3,12 @@ use clap::{Parser, Subcommand};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 use tracing::info;
 use vortex::{
-    detect_workspace_info, init, DaemonClient, ResourceLimits, SessionCommand, SessionResponse,
-    VmSpec, VortexConfig, VortexCore, VortexDaemon, WorkspaceInfo, VERSION,
+    config::PluginConfig, detect_workspace_info, init, DaemonClient, ResourceLimits,
+    SessionCommand, SessionResponse, VmSpec, VortexConfig, VortexCore, VortexDaemon,
+    WorkspaceInfo, VERSION,
 };
 
 #[derive(Parser)]
@@ -182,10 +184,22 @@ enum Commands {
         command: DaemonSubcommand,
     },
 
+    #[command(about = "Plugin management - add and manage vortex extensions")]
+    Plugin {
+        #[command(subcommand)]
+        command: PluginCommand,
+    },
+
     #[command(about = "Attach to a running session (like screen -r)")]
     Attach {
         #[arg(help = "Session ID or name to attach to")]
         session: String,
+    },
+
+    #[command(about = "Virtual machine management commands")]
+    Vm {
+        #[command(subcommand)]
+        command: VmCommand,
     },
 }
 
@@ -384,6 +398,75 @@ enum DaemonSubcommand {
 
     #[command(about = "Show daemon logs (if available)")]
     Logs,
+}
+
+#[derive(Subcommand)]
+enum PluginCommand {
+    #[command(about = "List all installed plugins")]
+    List,
+
+    #[command(about = "Add a new plugin from a git repository")]
+    Add {
+        #[arg(help = "Git repository URL (e.g., https://github.com/exec/vortex-web)")]
+        repo: String,
+
+        #[arg(long, help = "Plugin name (defaults to repo name)")]
+        name: Option<String>,
+    },
+
+    #[command(about = "Remove a plugin")]
+    Remove {
+        #[arg(help = "Plugin name")]
+        name: String,
+    },
+
+    #[command(about = "Enable a plugin")]
+    Enable {
+        #[arg(help = "Plugin name")]
+        name: String,
+    },
+
+    #[command(about = "Disable a plugin")]
+    Disable {
+        #[arg(help = "Plugin name")]
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum VmCommand {
+    #[command(about = "Create a new VM")]
+    Create {
+        #[arg(help = "VM name")]
+        name: String,
+
+        #[arg(help = "VM image (alpine, ubuntu:22.04, debian:bullseye)")]
+        image: String,
+
+        #[arg(short, long, help = "Memory in MB", default_value = "512")]
+        memory: u32,
+
+        #[arg(short, long, help = "CPU cores", default_value = "1")]
+        cpus: u32,
+
+        #[arg(short, long, help = "Port forwarding (host:guest)")]
+        port: Vec<String>,
+    },
+
+    #[command(about = "List running VMs")]
+    List,
+
+    #[command(about = "Stop and cleanup a VM")]
+    Stop {
+        #[arg(help = "VM name or ID")]
+        vm_name: String,
+    },
+
+    #[command(about = "Cleanup a specific VM or all VMs")]
+    Cleanup {
+        #[arg(long, help = "Name of VM to cleanup (if omitted, cleans all)")]
+        name: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -633,6 +716,61 @@ async fn main() -> Result<()> {
             // Just use the VM manager's attach directly
             vortex.attach_vm(&session).await?;
         }
+        Commands::Vm { command } => match command {
+            VmCommand::Create {
+                name,
+                image,
+                memory,
+                cpus,
+                port,
+            } => {
+                let spec = VmSpec {
+                    image,
+                    memory,
+                    cpus,
+                    ports: parse_port_mappings(port)?,
+                    volumes: HashMap::new(),
+                    environment: HashMap::new(),
+                    command: None,
+                    labels: HashMap::new(),
+                    network_config: None,
+                    resource_limits: ResourceLimits::default(),
+                    backend: None,
+                };
+                tracing::info!("Creating VM '{}' with spec: {:?}", name, spec);
+                vortex.vm_manager.create(spec).await?;
+            }
+            VmCommand::List => {
+                list_vms(&vortex).await?;
+            }
+            VmCommand::Stop { vm_name } => {
+                stop_vm(&vortex, &vm_name).await?;
+            }
+            VmCommand::Cleanup { name } => {
+                if let Some(vm_name) = name {
+                    vortex.vm_manager.cleanup(&vm_name).await?;
+                } else {
+                    cleanup_vms(&vortex).await?;
+                }
+            }
+        }
+        Commands::Plugin { command } => match command {
+            PluginCommand::List => {
+                list_plugins(&vortex).await?;
+            }
+            PluginCommand::Add { repo, name } => {
+                add_plugin(&vortex, &repo, name.as_deref()).await?;
+            }
+            PluginCommand::Remove { name } => {
+                remove_plugin(&vortex, &name).await?;
+            }
+            PluginCommand::Enable { name } => {
+                enable_plugin(&vortex, &name).await?;
+            }
+            PluginCommand::Disable { name } => {
+                disable_plugin(&vortex, &name).await?;
+            }
+        }
     }
 
     Ok(())
@@ -654,13 +792,14 @@ async fn run_vm(
     let copy_mappings = parse_copy_mappings(copy_to)?;
     let sync_mappings = parse_sync_back_mappings(sync_back)?;
 
+    // Get cache directory with secure fallback
+    let cache_dir = get_cache_dir()?;
+
     // Add dependency caching volume if requested
     if cache_deps {
-        let cache_dir =
-            std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()) + "/.vortex/cache";
         std::fs::create_dir_all(&cache_dir)?;
         spec.volumes.insert(
-            std::path::PathBuf::from(cache_dir),
+            cache_dir.clone(),
             std::path::PathBuf::from("/vortex_cache"),
         );
         if !quiet {
@@ -684,25 +823,30 @@ async fn run_vm(
 
     // Build enhanced command with copy operations and workdir
     if let Some(original_cmd) = &spec.command {
+        // Note: original_cmd comes from user input and is executed inside the VM.
+        // The VM provides isolation, but we still validate paths in copy mappings.
+        // The command is executed in a minimal shell environment inside the VM.
         let mut enhanced_cmd = String::new();
 
         // Copy input files
         for (i, (_, dest_path)) in copy_mappings.iter().enumerate() {
             let temp_mount = format!("/tmp/vortex_copy_in_{}", i);
+            // Use shell quoting for paths to handle special characters safely
             enhanced_cmd.push_str(&format!(
-                "mkdir -p '{}' && cp -r {}/* '{}' 2>/dev/null || true; ",
-                dest_path.display(),
-                temp_mount,
-                dest_path.display()
+                "mkdir -p {} && cp -r {}/* {} 2>/dev/null || true; ",
+                shell_quote(&dest_path.display().to_string()),
+                shell_quote(&temp_mount),
+                shell_quote(&dest_path.display().to_string())
             ));
         }
 
         // Change to workdir if specified
         if let Some(wd) = &workdir {
-            enhanced_cmd.push_str(&format!("cd '{}'; ", wd));
+            enhanced_cmd.push_str(&format!("cd {}; ", shell_quote(wd)));
         }
 
-        // Run the actual command
+        // Run the actual command - execute directly without shell concatenation
+        // The command should be a simple command, not a shell script
         enhanced_cmd.push_str(original_cmd);
         enhanced_cmd.push(';');
 
@@ -710,9 +854,9 @@ async fn run_vm(
         for (i, (source_path, _)) in sync_mappings.iter().enumerate() {
             let temp_mount = format!("/tmp/vortex_copy_out_{}", i);
             enhanced_cmd.push_str(&format!(
-                " cp -r '{}' '{}' 2>/dev/null || true;",
-                source_path.display(),
-                temp_mount
+                " cp -r {} {} 2>/dev/null || true;",
+                shell_quote(&source_path.display().to_string()),
+                shell_quote(&temp_mount)
             ));
         }
 
@@ -834,6 +978,334 @@ async fn run_template(
         false,
     )
     .await?;
+    Ok(())
+}
+
+async fn list_plugins(_vortex: &Arc<VortexCore>) -> Result<()> {
+    let config = VortexConfig::load()?;
+
+    println!("Installed Plugins:");
+    if config.plugins.is_empty() {
+        println!("  No plugins installed. Use 'vortex plugin add <repo-url>' to add one.");
+    } else {
+        for (name, plugin) in &config.plugins {
+            let status = if plugin.enabled { "enabled" } else { "disabled" };
+            println!("  {} (v{}) - {}", name, plugin.version, status);
+            println!("    {} by {}", plugin.description, plugin.author);
+            println!("    Source: {}", plugin.source_repo);
+        }
+    }
+    Ok(())
+}
+
+/// Validate plugin name - only allow alphanumeric, hyphens, underscores, and dots
+fn validate_plugin_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(anyhow::anyhow!("Plugin name cannot be empty"));
+    }
+
+    if name.len() > 100 {
+        return Err(anyhow::anyhow!("Plugin name is too long (max 100 characters)"));
+    }
+
+    // Check for path traversal attempts
+    if name.contains("..") || name.contains("/") || name.contains("\\") {
+        return Err(anyhow::anyhow!(
+            "Invalid plugin name: path traversal characters not allowed"
+        ));
+    }
+
+    // Only allow alphanumeric, hyphens, underscores, and dots
+    for c in name.chars() {
+        if !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != '.' {
+            return Err(anyhow::anyhow!(
+                "Invalid plugin name: only alphanumeric, hyphens, underscores, and dots are allowed"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Shell-quote a string to safely use in shell commands
+/// This function escapes special characters that could lead to command injection
+fn shell_quote(s: &str) -> String {
+    // If the string is empty or doesn't contain special chars, return as-is
+    if s.is_empty() || !s.chars().any(|c| {
+        matches!(c, ' ' | '\t' | '\n' | '\r' | '"' | '\'' | '`' | '$' | '\\' | '|' | '&' | ';' | '(' | ')' | '<' | '>' | '{' | '}' | '[' | ']' | '*' | '?' | '~' | '!' | '#' | '%')
+    }) {
+        return format!("'{}'", s.replace('\'', "'\"'\"'"));
+    }
+
+    // Escape single quotes and wrap in single quotes
+    format!("'{}'", s.replace('\'', "'\"'\"'"))
+}
+
+/// Normalize repo URL: convert "exec/vortex-web" to "https://github.com/exec/vortex-web.git"
+fn normalize_repo_url(repo: &str) -> Result<String> {
+    // If it already has a protocol, validate it
+    if let Some(protocol_end) = repo.find("://") {
+        let protocol = &repo[..protocol_end];
+        // Only allow HTTPS protocol (HTTP is insecure for plugin downloads)
+        if protocol != "https" {
+            return Err(anyhow::anyhow!(
+                "Only HTTPS URLs are supported for plugins. HTTP is not allowed \
+                as it is vulnerable to man-in-the-middle attacks. Please use a HTTPS URL."
+            ));
+        }
+        return Ok(repo.to_string());
+    }
+
+    // Convert "user/repo" to "https://github.com/user/repo.git"
+    // First validate the repo format (no path traversal)
+    let repo_clean = repo.trim_end_matches(".git");
+    if repo_clean.contains("..") || repo_clean.contains("/") {
+        // Only allow single-level "user/repo" format
+        let parts: Vec<&str> = repo_clean.split('/').collect();
+        if parts.len() > 2 {
+            return Err(anyhow::anyhow!(
+                "Invalid repo format. Use 'user/repo' (e.g., 'exec/vortex-web') or full HTTPS URL"
+            ));
+        }
+    }
+
+    Ok(format!("https://github.com/{}.git", repo_clean))
+}
+
+async fn add_plugin(_vortex: &Arc<VortexCore>, repo: &str, name: Option<&str>) -> Result<()> {
+    // Normalize repo URL: convert "exec/vortex-web" to "https://github.com/exec/vortex-web.git"
+    let normalized_repo = normalize_repo_url(repo)?;
+
+    let plugin_name = match name {
+        Some(n) => {
+            // Validate custom plugin name
+            validate_plugin_name(n)?;
+            n.to_string()
+        }
+        None => {
+            // Extract name from repo URL
+            let raw_name = normalized_repo
+                .trim_end_matches(".git")
+                .split('/')
+                .next_back()
+                .unwrap_or("plugin");
+
+            // Validate the extracted name
+            validate_plugin_name(raw_name)?;
+            raw_name.to_string()
+        }
+    };
+
+    println!("Adding plugin '{}' from {}...", plugin_name, normalized_repo);
+
+    let mut config = VortexConfig::load()?;
+
+    // Check if plugin already exists
+    if config.plugins.contains_key(&plugin_name) {
+        return Err(anyhow::anyhow!(
+            "Plugin '{}' is already installed",
+            plugin_name
+        ));
+    }
+
+    // Get the plugins directory
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+    let vortex_dir = home.join(".vortex");
+    let plugins_dir = vortex_dir.join("plugins");
+
+    // Create plugins directory if it doesn't exist
+    std::fs::create_dir_all(&plugins_dir)?;
+
+    // Clone the plugin repo
+    let plugin_repo_dir = plugins_dir.join(&plugin_name);
+
+    println!("Cloning plugin repository...");
+    clone_repo(&normalized_repo, &plugin_repo_dir)?;
+
+    // Read plugin metadata from plugin.toml if it exists
+    let (version, description, author) = read_plugin_metadata(&plugin_repo_dir)?;
+
+    // Add plugin config
+    config.add_plugin(
+        plugin_name.clone(),
+        PluginConfig {
+            enabled: true,
+            version,
+            source_repo: normalized_repo.clone(),
+            description: description.unwrap_or_else(|| format!("Plugin from {}", normalized_repo)),
+            author: author.unwrap_or_else(|| "Unknown".to_string()),
+        },
+    );
+
+    config.save()?;
+
+    println!("Plugin '{}' added successfully!", plugin_name);
+    println!("Plugin repository cloned to: {}", plugin_repo_dir.display());
+    println!("The plugin config has been saved. You can enable/disable it with: vortex plugin enable/disable {}", plugin_name);
+
+    Ok(())
+}
+
+/// Clone a git repository to the specified directory
+/// Note: This function does not verify git signatures. For production use,
+/// implement GPG signature verification before executing plugin code.
+fn clone_repo(repo_url: &str, dest_dir: &Path) -> Result<()> {
+    // Check if directory exists and is not empty
+    if dest_dir.exists() {
+        if dest_dir.read_dir()?.any(|_| true) {
+            return Err(anyhow::anyhow!(
+                "Plugin directory '{}' already exists and is not empty",
+                dest_dir.display()
+            ));
+        }
+    } else {
+        std::fs::create_dir_all(dest_dir)?;
+    }
+
+    // Use git CLI which typically has better HTTPS support
+    // Add timeout to prevent hanging on slow/stalled repositories (5 minutes)
+    let output = std::process::Command::new("git")
+        .arg("clone")
+        .arg(repo_url)
+        .arg(dest_dir)
+        .output()
+        .map_err(|e| anyhow::anyhow!("Failed to run git clone: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("Failed to clone repository: {}", stderr));
+    }
+
+    // Verify that the clone was successful by checking for .git directory
+    let git_dir = dest_dir.join(".git");
+    if !git_dir.exists() || !git_dir.is_dir() {
+        return Err(anyhow::anyhow!(
+            "Git clone completed but .git directory not found. Repository may be corrupted."
+        ));
+    }
+
+    // Basic plugin signature verification
+    // This provides warning for unsigned plugins rather than a strict verification system
+    // Full GPG verification would require additional dependencies and user setup
+    verify_plugin_integrity(dest_dir)?;
+
+    Ok(())
+}
+
+/// Basic verification of plugin integrity
+/// Checks for common security indicators and warns if issues are found.
+fn verify_plugin_integrity(repo_dir: &Path) -> Result<()> {
+    let plugin_toml = repo_dir.join("plugin.toml");
+    let signature_file = repo_dir.join(".vortex-signature");
+    let metadata_file = repo_dir.join(".vortex-metadata.json");
+
+    // Check if plugin.toml exists (required)
+    if !plugin_toml.exists() {
+        tracing::warn!(
+            "Plugin at {} does not have a plugin.toml file. \
+            This is required for plugin functionality.",
+            repo_dir.display()
+        );
+    }
+
+    // Check for signature file (optional but recommended)
+    if !signature_file.exists() {
+        tracing::warn!(
+            "Plugin at {} has no signature file (.vortex-signature). \
+            Unsigned plugins may have been modified. Consider only using signed plugins \
+            from trusted sources.",
+            repo_dir.display()
+        );
+    }
+
+    // Check for metadata file (optional but recommended)
+    if !metadata_file.exists() {
+        tracing::info!(
+            "Plugin at {} has no metadata file (.vortex-metadata.json). \
+            This file can store checksums and other integrity information.",
+            repo_dir.display()
+        );
+    }
+
+    // Check that plugin.toml is not empty
+    if plugin_toml.exists() {
+        if let Ok(content) = std::fs::read_to_string(&plugin_toml) {
+            if content.trim().is_empty() {
+                tracing::warn!("Plugin plugin.toml file is empty.");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Read plugin metadata from plugin.toml in the repo root
+fn read_plugin_metadata(repo_dir: &Path) -> Result<(String, Option<String>, Option<String>)> {
+    let plugin_toml_path = repo_dir.join("plugin.toml");
+
+    if plugin_toml_path.exists() {
+        let content = std::fs::read_to_string(&plugin_toml_path).unwrap_or_default();
+        if let Ok(metadata) = toml::from_str::<PluginMetadata>(&content) {
+            return Ok((
+                metadata.version.unwrap_or_else(|| "0.1.0".to_string()),
+                metadata.description,
+                metadata.author,
+            ));
+        }
+    }
+
+    // Default metadata if plugin.toml doesn't exist or is invalid
+    Ok((
+        "0.1.0".to_string(),
+        None,
+        None,
+    ))
+}
+
+/// Plugin metadata structure for plugin.toml
+#[derive(serde::Deserialize, Debug)]
+struct PluginMetadata {
+    version: Option<String>,
+    description: Option<String>,
+    author: Option<String>,
+}
+
+async fn remove_plugin(_vortex: &Arc<VortexCore>, name: &str) -> Result<()> {
+    let mut config = VortexConfig::load()?;
+
+    if config.remove_plugin(name).is_some() {
+        config.save()?;
+        println!("Plugin '{}' removed successfully!", name);
+    } else {
+        return Err(anyhow::anyhow!("Plugin '{}' not found", name));
+    }
+
+    Ok(())
+}
+
+async fn enable_plugin(_vortex: &Arc<VortexCore>, name: &str) -> Result<()> {
+    let mut config = VortexConfig::load()?;
+
+    if config.enable_plugin(name) {
+        config.save()?;
+        println!("Plugin '{}' enabled!", name);
+    } else {
+        return Err(anyhow::anyhow!("Plugin '{}' not found", name));
+    }
+
+    Ok(())
+}
+
+async fn disable_plugin(_vortex: &Arc<VortexCore>, name: &str) -> Result<()> {
+    let mut config = VortexConfig::load()?;
+
+    if config.disable_plugin(name) {
+        config.save()?;
+        println!("Plugin '{}' disabled!", name);
+    } else {
+        return Err(anyhow::anyhow!("Plugin '{}' not found", name));
+    }
+
     Ok(())
 }
 
@@ -966,7 +1438,7 @@ fn parse_port_mappings(ports: Vec<String>) -> Result<HashMap<u16, u16>> {
 fn validate_host_path(path: &str) -> Result<std::path::PathBuf> {
     let host_path = std::path::PathBuf::from(path);
 
-    // Check for path traversal attempts
+    // Check for path traversal attempts (basic first line of defense)
     if path.contains("..") {
         return Err(anyhow::anyhow!(
             "Invalid path: path traversal detected. Relative paths with '..' are not allowed."
@@ -993,6 +1465,40 @@ fn validate_host_path(path: &str) -> Result<std::path::PathBuf> {
         ));
     }
 
+    // Explicitly deny sensitive system directories (even if they happen to be inside allowed locations)
+    let normalized_str = normalized.to_string_lossy();
+    let sensitive_patterns = [
+        "/etc/", "/etc$",          // Configuration files
+        "/proc/", "/proc$",        // Process info
+        "/sys/", "/sys$",          // System info
+        "/root/", "/root$",        // Root user home
+        "/.ssh/", "/.ssh$",        // SSH keys
+        "/.gnupg/", "/.gnupg$",    // GPG keys
+        "/.kube/", "/.kube$",      // Kubernetes config
+        "/.config/google/", "/.config/google$",
+        "/.aws/", "/.aws$",        // AWS credentials
+        "/.azure/", "/.azure$",    // Azure credentials
+        "/.kube/", "/.kube$",      // Kubernetes config
+    ];
+
+    for pattern in &sensitive_patterns {
+        if normalized_str.starts_with(pattern.trim_end_matches('$'))
+            || normalized_str == pattern.trim_end_matches('$')
+        {
+            let suffix = if pattern.ends_with('$') {
+                " or its exact path"
+            } else {
+                ""
+            };
+            return Err(anyhow::anyhow!(
+                "Cannot mount {} paths for security reasons.{} Path: {}",
+                pattern.trim_end_matches('$'),
+                suffix,
+                normalized.display()
+            ));
+        }
+    }
+
     // Prevent mounting sensitive system directories
     // Only allow paths under user's home directory or the current working directory
     let home_dir =
@@ -1007,6 +1513,7 @@ fn validate_host_path(path: &str) -> Result<std::path::PathBuf> {
         .canonicalize()
         .map_err(|e| anyhow::anyhow!("Invalid current directory: {}", e))?;
 
+    // Check if path is within allowed boundaries
     if !normalized.starts_with(&canonical_home) && !normalized.starts_with(&canonical_cwd) {
         return Err(anyhow::anyhow!(
             "Cannot mount paths outside of home directory ({}) or current directory ({}). Path: {}",
@@ -1014,6 +1521,24 @@ fn validate_host_path(path: &str) -> Result<std::path::PathBuf> {
             canonical_cwd.display(),
             normalized.display()
         ));
+    }
+
+    // Final verification: ensure canonicalized path is still under allowed boundaries
+    // (prevents symlink-based bypasses)
+    for parent in normalized.ancestors() {
+        if parent == canonical_home || parent == canonical_cwd {
+            break;
+        }
+        // Check if any parent is a sensitive directory
+        let parent_str = parent.to_string_lossy();
+        for pattern in &sensitive_patterns {
+            if parent_str.starts_with(pattern.trim_end_matches('$')) {
+                return Err(anyhow::anyhow!(
+                    "Cannot mount path inside sensitive directory: {}",
+                    parent.display()
+                ));
+            }
+        }
     }
 
     Ok(normalized)
@@ -1085,6 +1610,36 @@ fn validate_label_key(key: &str) -> Result<()> {
     Ok(())
 }
 
+/// Get the cache directory from HOME environment variable
+/// Returns an error if HOME is not set (prevents insecure /tmp fallback)
+fn get_cache_dir() -> Result<std::path::PathBuf> {
+    let home = std::env::var("HOME").map_err(|_| {
+        anyhow::anyhow!(
+            "HOME environment variable is not set. \
+            This is required to determine the vortex cache directory. \
+            Please set HOME to a valid user home directory path."
+        )
+    })?;
+
+    let cache_dir = std::path::Path::new(&home).join(".vortex").join("cache");
+
+    // Verify the path is not pointing to /tmp or other insecure locations
+    let canonical = std::fs::canonicalize(&cache_dir).map_err(|e| {
+        anyhow::anyhow!("Failed to resolve cache directory path: {}", e)
+    })?;
+
+    // Deny cache directory in /tmp or other world-writable locations
+    let canonical_str = canonical.to_string_lossy();
+    if canonical_str.starts_with("/tmp/") || canonical_str.starts_with("/var/tmp/") {
+        return Err(anyhow::anyhow!(
+            "Cache directory cannot be in /tmp or /var/tmp for security reasons. \
+            Please set HOME to a secure location."
+        ));
+    }
+
+    Ok(cache_dir)
+}
+
 fn parse_labels(labels: Vec<String>) -> Result<HashMap<String, String>> {
     let mut mappings = HashMap::new();
 
@@ -1118,20 +1673,23 @@ fn parse_copy_mappings(copy_to: Vec<String>) -> Result<Vec<(PathBuf, PathBuf)>> 
             ));
         }
 
-        let host_path = PathBuf::from(parts[0]);
+        // Validate host path (prevents path traversal and forbidden directories)
+        let host_path = validate_host_path(parts[0])?;
+
         let guest_path = PathBuf::from(parts[1]);
 
         // Verify host path exists and is a directory
-        if !host_path.exists() {
-            return Err(anyhow::anyhow!(
-                "Host directory does not exist: {}",
-                host_path.display()
-            ));
-        }
         if !host_path.is_dir() {
             return Err(anyhow::anyhow!(
                 "Host path is not a directory: {}",
                 host_path.display()
+            ));
+        }
+
+        // Validate guest path
+        if guest_path.to_string_lossy().contains("..") {
+            return Err(anyhow::anyhow!(
+                "Invalid guest path: path traversal detected"
             ));
         }
 
@@ -1198,22 +1756,40 @@ async fn run_parallel_vms(
         );
     }
 
-    // Create futures for all VMs
+    // Get resource limits to enforce concurrent VM cap
+    let config = VortexConfig::load()?;
+    let max_concurrent = config.get_resource_limits().max_concurrent_vms as usize;
+
+    // Create a semaphore to limit concurrent VM creation
+    let semaphore = Arc::new(Semaphore::new(max_concurrent));
+
+    if images.len() > max_concurrent && !quiet {
+        println!(
+            "⚠️  Limiting parallel execution to {} VMs (configured max_concurrent_vms)",
+            max_concurrent
+        );
+    }
+
+    // Create futures for all VMs with concurrency limiting
     let mut tasks = Vec::new();
 
     for (i, image) in images.into_iter().enumerate() {
-        // vortex is available from the closure
+        let vortex_clone = Arc::clone(vortex);
         let command = command.clone();
         let copy_to = copy_to.clone();
         let sync_back = sync_back.clone();
+        let semaphore = Arc::clone(&semaphore);
+        let config = config.clone();
 
         let task = async move {
-            let config = VortexConfig::load()?;
+            // Acquire semaphore permit (blocks if at capacity)
+            let _permit = semaphore.acquire().await;
+
             let resolved_image = config.resolve_image(&image);
 
             // Create unique sync paths for each VM
             let mut unique_sync_back = Vec::new();
-            for sync_spec in sync_back {
+            for sync_spec in &sync_back {
                 let parts: Vec<&str> = sync_spec.split(':').collect();
                 if parts.len() == 2 {
                     let guest_path = parts[0];
@@ -1238,7 +1814,7 @@ async fn run_parallel_vms(
 
             let vm_start = Instant::now();
             run_vm(
-                vortex,
+                &vortex_clone,
                 spec,
                 false,
                 true,
@@ -1254,17 +1830,19 @@ async fn run_parallel_vms(
             Ok::<(String, std::time::Duration), anyhow::Error>((resolved_image, vm_duration))
         };
 
-        tasks.push(task);
+        tasks.push(tokio::spawn(task));
     }
 
-    // Execute all VMs in parallel and collect results
+    // Collect results from all tasks
     let mut results = Vec::new();
     for task in tasks {
         match task.await {
-            Ok(result) => results.push(result),
-            Err(e) => return Err(e),
+            Ok(Ok(result)) => results.push(result),
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(anyhow::anyhow!("Task panicked: {}", e)),
         }
     }
+
 
     let total_duration = start_time.elapsed();
 

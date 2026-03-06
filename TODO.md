@@ -1,5 +1,24 @@
 # Vortex TODO List
 
+## v1.0.0rc2 - Next Release
+
+### High Priority
+- [ ] **Security Audit** - Comprehensive security review of codebase
+- [ ] **Error Handling** - Review and improve error messages across all commands
+- [ ] **Testing** - Add integration tests for plugin system
+- [ ] **Documentation** - Add plugin system examples and tutorials
+
+### Medium Priority
+- [ ] **Performance Testing** - Validate speed claims against Docker
+- [ ] **Unit Tests** - Add unit tests for core library modules
+- [ ] **Build System** - Improve build reproducibility
+
+### Low Priority
+- [ ] **Contributor Guide** - Add detailed guide for external contributors
+- [ ] **Plugin Template** - Create a template repo for plugin development
+
+---
+
 ## Phase 5: Directory-to-VM Mapping - Completed
 
 ### Completed
@@ -11,6 +30,7 @@
 - ✅ YAML configuration file generation with all detected services
 - ✅ Backend selection feature (krunvm/firecracker support)
 - ✅ Graceful degradation when no backend installed
+- ✅ Plugin system implementation (git-based plugin management)
 - ✅ Updated documentation
 
 ### Notes
@@ -88,7 +108,7 @@ Phase 5 delivers complete workspace initialization with auto-discovery, language
 
 ### Low Priority
 7. **Windows Support** - Add Windows platform support
-8. **Plugins** - Design plugin system architecture
+8. **Plugins** - ✅ Plugin system implemented (git-based, vortex plugin add/remove/enable/disable)
 9. **Cloud** - Research cloud provider integrations
 
 ---
@@ -99,4 +119,4 @@ Phase 5 delivers complete workspace initialization with auto-discovery, language
 
 ---
 
-*Last updated: 2026-02-11*
+*Last updated: 2026-02-24*
